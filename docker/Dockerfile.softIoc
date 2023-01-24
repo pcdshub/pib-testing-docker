@@ -1,0 +1,13 @@
+# syntax=docker/dockerfile:1.4
+# vi: syntax=Dockerfile
+
+ARG EPICS_BASE_IMAGE_TAG=
+
+FROM pcdshub/pcds-epics-base:${EPICS_BASE_IMAGE_TAG}
+
+ARG MACRO_VERSION=R0.3.1
+RUN git clone --depth 1 --branch=${MACRO_VERSION} \
+        https://github.com/pcdshub/ioc-template-macros \
+        /reg/g/pcds/controls/macro/
+
+WORKDIR /cds/home/docker

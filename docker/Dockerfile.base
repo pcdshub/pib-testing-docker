@@ -1,0 +1,99 @@
+# syntax=docker/dockerfile:1.4
+# vi: syntax=Dockerfile
+
+FROM centos:centos7.9.2009
+
+# Install things from yum, including build requirements for epics
+# The long list is a slightly-pruned version of what gets installed based on
+# "ioctools" in puppet.
+# Further notes in README and more pruning is required.
+
+RUN yum update -y && \
+    yum -y install \
+      atk \
+      bison \
+      blas \
+      bzip2-devel \
+      centos-release-scl \
+      compat-libf2c-34 \
+      file \
+      fontconfig \
+      gcc \
+      gcc-c++ \
+      glib2-devel \
+      glibc-devel \
+      glibc-headers \
+      gsl \
+      iputils \
+      lapack \
+      libICE \
+      libSM \
+      libgfortran \
+      libicu \
+      libicui18n \
+      libjpeg-turbo \
+      libpng-devel \
+      libstdc++-devel \
+      libxcb \
+      mesa-libGL \
+      mesa-libGLU \
+      motif \
+      ncurses-devel \
+      ncurses-term \
+      net-snmp-agent-libs \
+      net-snmp-libs \
+      net-snmp-utils \
+      numpy \
+      openssl-devel \
+      pango \
+      pcre2 \
+      perl-devel \
+      postgresql-libs \
+      procps-ng \
+      python-ldap \
+      python-magic \
+      python-nose \
+      python-perf \
+      python-requests \
+      python-setuptools \
+      python-simplejson \
+      python-urllib3 \
+      readline-devel \
+      sudo \
+      tcl \
+      tk \
+      unixODBC \
+      uuid \
+      vim-enhanced \
+      wget \
+      which \
+      xz \
+      zlib \
+    && \
+    \
+    yum -y install rh-git218 rh-python38 rh-python38-python-devel && \
+    yum -y groupinstall 'Development Tools' && \
+    yum -y clean all
+
+COPY <<EOF /etc/profile.d/enable_git218.sh
+#!/bin/bash
+source scl_source enable rh-git218
+EOF
+
+RUN mkdir -p -m 2775 /afs /cds /reg /cds/home/docker
+RUN ln -s /opt/rh/rh-python38/root/bin/python3.8 /usr/bin/python3 && \
+    ln -s /opt/rh/rh-python38/root/bin/pip /usr/bin/pip3
+
+# Add in a user with some sensible settings to poke around
+RUN groupadd ps-pcds && \
+    groupadd sudo && \
+    useradd --shell /bin/bash --home-dir /cds/home/docker --gid ps-pcds --groups sudo docker && \
+    echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+
+RUN chown docker:ps-pcds /afs /cds /reg /cds/home/docker
+
+USER docker
+
+WORKDIR /cds/home/docker
+
+ENTRYPOINT /bin/bash --login

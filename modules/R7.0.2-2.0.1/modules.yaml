@@ -1,0 +1,8 @@
+modules:
+  SNCSEQ:
+    git:
+      url: https://github.com/slac-epics/seq.git
+      tag: R2.2.4-1.2
+  DEVIOCSTATS:
+    git:
+      url: github.com/slac-epics/iocStats.git
