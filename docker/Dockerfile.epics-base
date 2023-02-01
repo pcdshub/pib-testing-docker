@@ -1,15 +1,18 @@
 # syntax=docker/dockerfile:1.4
 # vi: syntax=Dockerfile
 
-FROM pcdshub/pcds-ioc-machine-base:latest
+FROM pcdshub/pcds-ioc-base:latest
 
 COPY --chown=docker builder /builder
 
-ARG EPICS_BASE_DIR=R7.0.2-2.0
-ARG EPICS_BASE_VERSION=R7.0.2-2.0.1
+ARG SPECS=
+ARG EPICS_BASE_DIR=
+ARG EPICS_BASE_VERSION=
 
 ENV EPICS_BASE=/cds/group/pcds/epics/base/${EPICS_BASE_DIR}
 ENV EPICS_HOST_ARCH=rhel7-x86_64
+
+COPY --chown=docker ${SPECS}/base.yaml /spec/base.yaml
 
 # A git hook template to automatically fix up directories such as:
 #   /afs/slac/g/cd/swe/git/repos/package/epics/modules/pvAccessCPP.git
@@ -22,6 +25,7 @@ RUN git clone --recursive --single-branch --depth 1 --branch ${EPICS_BASE_VERSIO
         https://github.com/slac-epics/epics-base "${EPICS_BASE}"
 
 # A bit of a hack to always give RHEL7 instead of linux-x86_64
+# TODO: this indicates a patching system would be a good idea, as all the other tools offer
 COPY --chown=docker <<EOF "${EPICS_BASE}/startup/EpicsHostArch"
 #!/bin/bash
 echo "rhel7-x86_64"

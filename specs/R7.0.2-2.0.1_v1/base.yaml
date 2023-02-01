@@ -1,6 +1,7 @@
 modules:
-  EPICS_BASE:
-    path: /cds/group/pcds/epics/base/R7.0.2-2.0
+  epics-base:
+    variable: EPICS_BASE
+    install_path: /cds/group/pcds/epics/base/R7.0.2-2.0
     git:
       url: https://github.com/slac-epics/epics-base.git
       tag: R7.0.2-2.0.1

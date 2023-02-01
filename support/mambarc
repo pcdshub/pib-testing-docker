@@ -1,0 +1,9 @@
+channels:
+  - conda-forge
+add_pip_as_python_dependency: true
+always_yes: true
+auto_activate_base: true
+auto_update_conda: false
+changeps1: false
+channel_priority: strict
+notify_outdated_conda: false

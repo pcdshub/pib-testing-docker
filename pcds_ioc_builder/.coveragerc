@@ -1,0 +1,11 @@
+[run]
+source =
+    pcds_ioc_builder
+[report]
+omit =
+    #versioning
+    .*version.*
+    *_version.py
+    #tests
+    *test*
+    pcds_ioc_builder/tests/*

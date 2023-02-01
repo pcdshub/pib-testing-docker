@@ -1,2 +1,4 @@
 apischema==0.18.0
 whatrecord==0.4.2
+pyyaml==6.0
+yq==3.1.0

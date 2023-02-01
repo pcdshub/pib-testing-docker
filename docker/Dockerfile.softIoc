@@ -5,9 +5,30 @@ ARG EPICS_BASE_IMAGE_TAG=
 
 FROM pcdshub/pcds-epics-base:${EPICS_BASE_IMAGE_TAG}
 
+USER root
+WORKDIR /usr/local
+
+RUN curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xvj bin/micromamba
+RUN chmod +x /usr/local/bin/micromamba
+
+USER docker
+
+COPY --chown=docker ./support/mambarc /cds/home/docker/.mambarc
+COPY --chown=docker ./support/mamba /usr/local/bin/mamba
+COPY --chown=docker ./support/python /usr/local/bin/python
+RUN mkdir ~/micromamba
+
+RUN mamba install python=3.10 jq yq pip
+
 ARG MACRO_VERSION=R0.3.1
 RUN git clone --depth 1 --branch=${MACRO_VERSION} \
         https://github.com/pcdshub/ioc-template-macros \
         /reg/g/pcds/controls/macro/
+
+COPY --chown=docker ./pcds_ioc_builder /cds/home/docker/pcds-ioc-builder
+RUN python -m pip install ~/pcds-ioc-builder && rm -rf ~/pcds-ioc-builder
+
+# I think we can do base with the builder as well, but I don't want to develop
+# the tools to build base first because of how long it takes to build... (TODO)
 
 WORKDIR /cds/home/docker

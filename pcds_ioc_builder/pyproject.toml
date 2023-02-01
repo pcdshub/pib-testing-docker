@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=45", ]
+
+[project]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3",
+]
+
+description = "IOC building tools"
+dynamic = [ "readme", "dependencies", "optional-dependencies",]
+keywords = []
+name = "pcds-ioc-builder"
+requires-python = ">=3.9"
+version = "0.0.1"
+
+[options]
+zip_safe = false
+include_package_data = true
+
+[tool.setuptools.packages.find]
+where = [ ".",]
+include = [ "pcds_ioc_builder*",]
+namespaces = false
+
+[[project.authors]]
+name = "SLAC National Accelerator Laboratory"
+
+[project.license]
+file = "LICENSE"
+
+[project.scripts]
+"pcds-ioc-builder" = "pcds_ioc_builder.bin.main:main"
+
+[tool.setuptools.dynamic.readme]
+file = "README.rst"
+
+[tool.setuptools.dynamic.dependencies]
+file = [ "requirements.txt",]
+
+[tool.setuptools.dynamic.optional-dependencies.test]
+file = "dev-requirements.txt"
