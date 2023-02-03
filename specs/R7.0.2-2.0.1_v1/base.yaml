@@ -1,5 +1,5 @@
 modules:
-  epics-base:
+  - name: epics-base
     variable: EPICS_BASE
     install_path: /cds/group/pcds/epics/base/R7.0.2-2.0
     git:

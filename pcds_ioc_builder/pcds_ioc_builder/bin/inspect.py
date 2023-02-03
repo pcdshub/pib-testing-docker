@@ -21,15 +21,6 @@ def main(path: Union[pathlib.Path, str], recurse: bool = True) -> None:
     print(list(inspector.group.all_modules))
     print(list(inspector.find_all_dependencies()))
     print(list(inspector.find_all_missing_dependencies()))
-    # root = group.all_modules[group.root]
-    # root.missing_paths
-    # for path, module in group.all_modules.items():
-    #     version = VersionInfo.from_path(path)
-    #     print(path, version)
-
-    # 'tool inspect' -> configuration file
-    # 'tool download' -> download missing dependencies
-    # 'tool build' -> build dependency or dependencies
 
 
 def build_arg_parser(argparser=None) -> argparse.ArgumentParser:

@@ -22,7 +22,7 @@ include_package_data = true
 [tool.setuptools.packages.find]
 where = [ ".",]
 include = [ "pcds_ioc_builder*",]
-namespaces = false
+namespaces = true
 
 [[project.authors]]
 name = "SLAC National Accelerator Laboratory"

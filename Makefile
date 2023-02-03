@@ -13,7 +13,9 @@ SPECS=./specs/${EPICS_BASE_IMAGE_TAG}
 BASE_SPEC=$(SPECS)/base.yaml
 MODULE_SPEC=$(SPECS)/modules.yaml
 
-RUN_BUILDER=docker run --rm  -v $(shell pwd)/$(SPECS):/specs -t pcdshub/pcds-ioc-builder:latest
+RUN_BUILDER=docker run --rm -v $(shell pwd)/$(SPECS):/specs -t pcdshub/pcds-ioc-builder:latest
+BUILDER_GET_BASE_PATH=yq -r '.modules[] | select(.name="epics-base") | .install_path' base.yaml
+BUILDER_GET_BASE_VERSION=yq -r '.modules[] | select(.name="epics-base") | .git.tag' base.yaml
 
 export DOCKER_BUILDKIT
 export EPICS_BASE_VERSION
@@ -28,17 +30,20 @@ initialize:
 build-base: initialize docker/Dockerfile.base
 	docker build --tag pcdshub/pcds-ioc-base:latest --file docker/Dockerfile.base .
 
-build-builder: initialize docker/Dockerfile.builder builder/*
+build-builder: initialize docker/Dockerfile.builder pcds_ioc_builder/*
 	docker build --tag pcdshub/pcds-ioc-builder:latest --file docker/Dockerfile.builder .
 
 build-epics: build-builder build-base docker/Dockerfile.epics-base $(BASE_SPEC)
-	docker build \
-		--tag pcdshub/pcds-epics-base:${EPICS_BASE_IMAGE_TAG} \
-		--build-arg SPECS=$(SPECS) \
-		--build-arg EPICS_BASE_DIR=$(shell $(RUN_BUILDER) yq -r '.modules["epics-base"].install_path' base.yaml) \
-		--build-arg EPICS_BASE_VERSION=$(shell $(RUN_BUILDER) yq -r '.modules["epics-base"].git.tag' base.yaml) \
-		--file docker/Dockerfile.epics-base \
-		.
+	base_version=$(shell $(RUN_BUILDER) $(BUILDER_GET_BASE_VERSION)); \
+	base_path=$(shell $(RUN_BUILDER) $(BUILDER_GET_BASE_PATH)); \
+			echo "EPICS base: $${base_version} installed to $${base_path}}"; \
+			docker build \
+				--tag pcdshub/pcds-epics-base:${EPICS_BASE_IMAGE_TAG} \
+				--build-arg SPECS=$(SPECS) \
+				--build-arg EPICS_BASE=$${base_path} \
+				--build-arg EPICS_BASE_VERSION=$${base_version} \
+				--file docker/Dockerfile.epics-base \
+				.
 
 build-modules: build-epics docker/Dockerfile.modules $(MODULE_SPEC)
 	docker build  \
@@ -52,9 +57,11 @@ run-ioc: build-modules
 
 test:
 	docker build  \
+		--tag test \
 		--build-arg EPICS_BASE_IMAGE_TAG=${EPICS_BASE_IMAGE_TAG} \
 		--build-arg SPECS=$(SPECS) \
 		--file docker/Dockerfile.softIoc \
+		--progress=plain \
 		.
 
 .PHONY: build-builder build-modules build-base build-epics initialize run-ioc all

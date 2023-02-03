@@ -3,4 +3,7 @@
 eval "$(micromamba shell hook --shell=bash)"
 
 micromamba activate
-python $@
+
+# Run the arguments inside of the micromamba environment
+set -x
+$@

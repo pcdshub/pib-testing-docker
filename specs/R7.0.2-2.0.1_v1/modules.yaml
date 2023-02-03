@@ -1,8 +1,16 @@
 modules:
-  SNCSEQ:
+  - name: asyn
+    variable: ASYN
+    git:
+      url: https://github.com/slac-epics/asyn.git
+      tag: R2.2.4-1.2
+  - name: seq
+    variable: SNCSEQ
     git:
       url: https://github.com/slac-epics/seq.git
       tag: R2.2.4-1.2
-  DEVIOCSTATS:
+  - name: iocAdmin
+    variable: IOCADMIN
     git:
-      url: github.com/slac-epics/iocStats.git
+      url: https://github.com/slac-epics/iocAdmin.git
+      tag: R3.1.16-1.3.2

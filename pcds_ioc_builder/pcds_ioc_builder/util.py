@@ -5,8 +5,10 @@ import shlex
 import sys
 from typing import Optional
 
-
 import logging
+
+
+MODULE_PATH = pathlib.Path(__file__).resolve().parent
 
 logger = logging.getLogger(__name__)
 

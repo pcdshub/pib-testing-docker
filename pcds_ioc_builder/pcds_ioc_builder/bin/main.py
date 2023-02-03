@@ -8,19 +8,20 @@ Try:
 import argparse
 import asyncio
 import importlib
+import pathlib
 import logging
 from inspect import iscoroutinefunction
 
 import pcds_ioc_builder
+from ..util import MODULE_PATH
 
 DESCRIPTION = __doc__
 
 
 command_to_module = {
-    "parse": "parse",
-    "inspect": "inspect",
-    # "add-module": "add_module",
-    # "build": "build"
+    module.stem.replace("_", "-"): module.stem
+    for module in (MODULE_PATH / "bin").glob("*.py")
+    if module.stem not in ("__init__", "main")
 }
 
 

@@ -3,11 +3,13 @@ from __future__ import annotations
 import dataclasses
 import logging
 import pathlib
+import shlex
 import re
 from dataclasses import dataclass
 from typing import ClassVar, Optional, Generator
 
 from whatrecord.makefile import Dependency, DependencyGroup, Makefile
+from .exceptions import DownloadFailure
 from . import git
 from .spec import GitSource, Module
 from .makefile import get_makefile_for_path
@@ -32,14 +34,30 @@ class BaseSettings:
 
     @classmethod
     def from_base_version(
-        cls, version: VersionInfo, extra_variables: Optional[dict[str, str]] = None
+        cls, base: Module, extra_variables: Optional[dict[str, str]] = None
     ):
+        base_path = base.install_path or EPICS_SITE_TOP / "base" / base.version
+        if base.install_path is not None:
+            # TODO get rid of this inconsistency
+            support = EPICS_SITE_TOP / base.install_path.parts[-1] / "modules"
+        else:
+            support = EPICS_SITE_TOP / base.version / "modules"
+
         return cls(
-            epics_base=EPICS_SITE_TOP / "base" / version.tag,
-            support=EPICS_SITE_TOP / version.tag / "modules",
+            epics_base=base_path,
+            support=support,
             extra_variables=dict(extra_variables or {}),
             # epics_site_top=pathlib.Path("/cds/group/pcds/"),
         )
+
+    def get_path_for_module(self, module: Module) -> pathlib.Path:
+        if module.install_path is not None:
+            return module.install_path
+
+        tag = module.version
+        if "-branch" in tag:
+            tag = tag.replace("-branch", "")
+        return self.support / module.name / tag
 
     def get_path_for_version_info(self, version: VersionInfo) -> pathlib.Path:
         """
@@ -220,6 +238,53 @@ def get_build_order(
 
     logger.debug("Determined build order: %s", ", ".join(build_order))
     return build_order
+
+
+def get_makefile_for_module(module: Module, settings: BaseSettings) -> Makefile:
+    path = settings.get_path_for_module(module)
+    return get_makefile_for_path(path, epics_base=settings.epics_base)
+
+
+def get_dependency_group_for_module(
+    module: Module,
+    settings: BaseSettings,
+    recurse: bool = True,
+    name: Optional[str] = None,
+    variable_name: Optional[str] = None,
+    keep_os_env: bool = False,
+) -> DependencyGroup:
+    makefile = get_makefile_for_module(module, settings)
+    return DependencyGroup.from_makefile(
+        makefile,
+        recurse=recurse,
+        variable_name=variable_name or module.variable,
+        name=name or module.name,
+        keep_os_env=keep_os_env
+    )
+
+
+def download_module(module: Module, settings: BaseSettings) -> pathlib.Path:
+    if module.install_path is not None:
+        path = module.install_path
+    else:
+        path = settings.get_path_for_module(module)
+
+    if module.git is None:
+        raise NotImplementedError("only git-backed modules supported at the moment")
+
+    logger.info("Downloading module %s to %s", module.name, path)
+    if git.clone(
+        module.git.url,
+        to_path=path,
+        depth=module.git.depth,
+        recursive=module.git.recursive,
+        args=shlex.split(module.git.args or ""),
+    ):
+        raise DownloadFailure(
+            f"Failed to download {module.git.url}; git returned a non-zero exit code"
+        )
+
+    return path
 
 
 @dataclasses.dataclass
@@ -583,274 +648,3 @@ class CueShim:
 
         makefile = self.get_makefile_for_path(self.target_path)
         return DependencyGroup.from_makefile(makefile)
-
-    def get_makefile_for_path(self, path: pathlib.Path) -> Makefile:
-        """
-        Get a whatrecord :class:`Makefile` for the provided path.
-
-        Parameters
-        ----------
-        path : pathlib.Path
-            The path to search for a Makefile, or a path to the makefile
-            itself.
-
-        Returns
-        -------
-        Makefile
-        """
-        return Makefile.from_file(
-            Makefile.find_makefile(path),
-            keep_os_env=False,
-            # NOTE: may need to specify an existing epics-base to get the build
-            # system makefiles.  Alternatively, a barebones version could be
-            # packaged to do so?
-            variables=self.introspection_paths.to_variables(),
-        )
-
-    def get_path_for_version_info(self, dep: VersionInfo) -> pathlib.Path:
-        """
-        Get the cache path for the provided dependency with version
-        information.
-
-        Parameters
-        ----------
-        dep : VersionInfo
-            The version information for the dependency, either derived by way
-            of introspection or manually.
-
-        Returns
-        -------
-        pathlib.Path
-
-        """
-        tag = dep.tag
-        if "-branch" in tag:
-            tag = tag.replace("-branch", "")
-        return self.module_cache_path / f"{dep.name}-{tag}"
-
-    def update_settings(self, settings: dict[str, str], overwrite: bool = True):
-        """
-        Update cue's settings dictionary verbosely.
-
-        Parameters
-        ----------
-        settings : dict[str, str]
-            Settings to update, key to value.
-        overwrite : bool, optional
-            Overwrite existing settings.  Defaults to True.
-        """
-        for key, value in settings.items():
-            old_value = self._cue.setup.get(key, None)
-            if old_value == value:
-                continue
-            if old_value is not None:
-                if overwrite:
-                    logger.debug("cue setup overwriting %s: old=%r new=%r", key, old_value, value)
-                    self._cue.setup[key] = value
-                else:
-                    logger.debug("cue setup not overwriting: %s=%r", key, old_value)
-            else:
-                logger.debug("cue setup %s=%r", key, value)
-                self._cue.setup[key] = value
-
-    def git_reset_repo_directory(self, variable_name: Optional[str], directory: str):
-        """
-        Run git reset (or git checkout --) on a specific subdirectory
-        of a dependency.
-
-        Parameters
-        ----------
-        variable_name : str
-            The dependency's variable name (as defined in makefiles).
-        directory : str
-            The subdirectory of that dependency.
-        """
-        if variable_name is None:
-            module_path = self.target_path
-        else:
-            version = self.variable_to_version[variable_name]
-            module_path = self.get_path_for_version_info(version)
-        self._cue.call_git(["checkout", "--", directory], cwd=str(module_path))
-
-    @property
-    def module_release_local(self) -> pathlib.Path:
-        """
-        The RELEASE.local file containing all dependencies, generated by cue.
-        """
-        return self.module_cache_path / "RELEASE.local"
-
-    def _check_group_is_ready(self):
-        if self.group is None:
-            raise RuntimeError("epics-base version not yet set")
-        if not self.introspection_paths.epics_base.exists():
-            raise RuntimeError("epics-base for introspection / building not present")
-
-    def use_epics_base(self, tag: str, build: bool = True, reset_configure: bool = True):
-        """
-        Add EPICS_BASE as a dependency given the provided tag.
-
-        Parameters
-        ----------
-        tag : str
-            The epics-base tag to use.
-        build : bool, optional
-            Build epics-base now.  Defaults to False.
-        reset_configure : bool, optional
-            Reset epics-base/configure/* to the git HEAD, if changed.
-        """
-        # "building base" means that the ci script is used _just_ for epics-base
-        # and is located in the current working directory (".").  Don't set it
-        # for our modules/IOCs.
-        self._cue.building_base = False
-        base_version = VersionInfo(
-            name="epics-base",
-            base=tag,
-            tag=tag,
-        )
-        cache_base = self.cache_path / "base"
-        cache_base.mkdir(parents=True, exist_ok=True)
-
-        # with open(self.cache_path / "RELEASE_SITE", "wt") as fp:
-        #     print(f"EPICS_SITE_TOP={cache_base}", file=fp)
-        #     print(f"BASE_MODULE_VERSION={tag}", file=fp)
-        #     print("EPICS_MODULES=$(EPICS_SITE_TOP)/modules", file=fp)
-
-        # tagged_base_path = self.cache_path / "base" / tag
-        # if tagged_base_path.exists() and tagged_base_path.is_symlink():
-        #     tagged_base_path.unlink()
-
-        # os.symlink(
-        #     # modules/epics-base-... ->
-        #     self.get_path_for_version_info(base_version),
-        #     # base/tag/...
-        #     tagged_base_path
-        # )
-        self.add_dependency(
-            "EPICS_BASE",
-            base_version,
-            reset_configure=reset_configure,
-            add_to_group=False,
-        )
-
-        base_path = self.get_path_for_version_info(base_version)
-
-        cache_path = self.get_path_for_version_info(base_version)
-        # TODO
-        self._cue.places["EPICS_BASE"] = str(cache_path)
-
-        if build:
-            self.module_release_local.touch(exist_ok=True)
-            self._cue.setup_for_build(CueOptions())
-            self._cue.call_make(cwd=str(cache_path), parallel=4, silent=True)
-
-        self.introspection_paths = PcdsBuildPaths(
-            epics_base=base_path,
-            epics_site_top=pathlib.Path("/cds/group/pcds/"),
-            epics_modules=pathlib.Path(f"/cds/group/pcds/epics/{tag}/modules"),
-        )
-
-        self.group = self._create_dependency_group()
-        dep = self.group.all_modules[self.group.root]
-        logger.debug(
-            (
-                "Checking the primary target for dependencies after epics-base installation. \n"
-                "\nExisting dependencies:\n"
-                "    %s"
-                "\nMissing paths: \n"
-                "    %s"
-            ),
-            "\n    ".join(f"{var}={value}" for var, value in dep.dependencies.items()),
-            "\n    ".join(f"{var}={value}" for var, value in dep.missing_paths.items()),
-        )
-
-    def _update_makefiles_in_path(self, base_path: pathlib.Path, makefile: Makefile):
-        """
-        Update makefiles found during the introspection step that exist in ``base_path``.
-
-        Updates module dependency paths based.
-
-        Parameters
-        ----------
-        base_path : pathlib.Path
-            The path to update makefiles under.
-        makefile : Makefile
-            The primary Makefile that contains paths of relevant included makefiles.
-        """
-        for makefile_relative in makefile.makefile_list:
-            makefile_path = (base_path / makefile_relative).resolve()
-            try:
-                makefile_path.relative_to(base_path)
-            except ValueError:
-                # logger.debug(
-                #     "Skipping makefile: %s (not relative to %s)",
-                #     makefile_path,
-                #     base_path,
-                # )
-                continue
-
-            try:
-                patch_makefile(makefile_path, self.makefile_variables_to_patch)
-            except PermissionError:
-                logger.error("Failed to patch makefile due to permissions: %s", makefile_path)
-            except Exception:
-                logger.exception("Failed to patch makefile: %s", makefile_path)
-
-    # @folded_output("Updating makefiles")
-    def update_makefiles(self):
-        """
-        Updates all makefiles with appropriate paths.
-
-        * RELEASE.local from epics-ci cue
-        * Dependency makefiles found during the introspection stage
-        """
-        for dep in self.variable_to_dependency.values():
-            assert dep.variable_name is not None
-            version = self.variable_to_version[dep.variable_name]
-            dep_path = self.get_path_for_version_info(version)
-            logger.debug("Updating RELEASE.local: %s=%s", dep.variable_name, dep_path)
-            self._cue.update_release_local(dep.variable_name, str(dep_path))
-
-            if dep in ("EPICS_BASE", "BASE"):  # argh, why can't I remember which
-                continue
-
-            self._update_makefiles_in_path(dep_path, dep.makefile)
-
-        self._update_makefiles_in_path(self.target_path, self.ioc_makefile)
-
-    @property
-    def ioc(self) -> Dependency:
-        self._check_group_is_ready()
-        assert self.group is not None
-        return self.group.all_modules[self.group.root]
-
-    @property
-    def ioc_makefile(self) -> Makefile:
-        return self.ioc.makefile
-
-    @property
-    def makefile_variables_to_patch(self) -> dict[str, str]:
-        """Variables to patch in module makefiles."""
-        to_patch = {
-            variable: str(path)
-            for variable, path in self.dependency_to_path.items()
-        }
-        # Use EPEL re2c for now instead of the pspkg one:
-        to_patch["RE2C"] = "re2c"
-        return to_patch
-
-    @property
-    def dependency_to_path(self) -> dict[str, pathlib.Path]:
-        """Dependency variable name to cache path."""
-        return {
-            var: self.get_path_for_version_info(version)
-            for var, version in self.variable_to_version.items()
-        }
-
-    def update_build_order(self) -> List[str]:
-        """Update cue's build order of the modules to compile."""
-        build_order = self.get_build_order()
-        self._cue.modules_to_compile[:] = [
-            cue_set_name_overrides.get(variable, variable)
-            for variable in build_order
-        ]
-        return build_order

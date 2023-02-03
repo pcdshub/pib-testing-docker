@@ -6,10 +6,10 @@ FROM pcdshub/pcds-ioc-base:latest
 COPY --chown=docker builder /builder
 
 ARG SPECS=
-ARG EPICS_BASE_DIR=
+ARG EPICS_BASE=
 ARG EPICS_BASE_VERSION=
 
-ENV EPICS_BASE=/cds/group/pcds/epics/base/${EPICS_BASE_DIR}
+ENV EPICS_BASE=${EPICS_BASE}
 ENV EPICS_HOST_ARCH=rhel7-x86_64
 
 COPY --chown=docker ${SPECS}/base.yaml /spec/base.yaml

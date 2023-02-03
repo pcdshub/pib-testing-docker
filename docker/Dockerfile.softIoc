@@ -14,8 +14,7 @@ RUN chmod +x /usr/local/bin/micromamba
 USER docker
 
 COPY --chown=docker ./support/mambarc /cds/home/docker/.mambarc
-COPY --chown=docker ./support/mamba /usr/local/bin/mamba
-COPY --chown=docker ./support/python /usr/local/bin/python
+COPY --chown=docker ./support/bin/* /usr/local/bin/
 RUN mkdir ~/micromamba
 
 RUN mamba install python=3.10 jq yq pip
@@ -32,3 +31,18 @@ RUN python -m pip install ~/pcds-ioc-builder && rm -rf ~/pcds-ioc-builder
 # the tools to build base first because of how long it takes to build... (TODO)
 
 WORKDIR /cds/home/docker
+
+WORKDIR /spec
+
+RUN pwd
+
+ARG SPECS=
+# TODO remove; set in previous build
+COPY --chown=docker ${SPECS}/base.yaml /spec/base.yaml
+COPY --chown=docker ${SPECS}/modules.yaml /spec/modules.yaml
+
+RUN find /cds -type d
+RUN pcds-ioc-builder --help
+RUN pcds-ioc-builder download base.yaml modules.yaml
+RUN pcds-ioc-builder sync base.yaml modules.yaml
+RUN pcds-ioc-builder build base.yaml modules.yaml
