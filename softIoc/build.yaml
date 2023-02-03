@@ -1,0 +1,3 @@
+application:
+  binary: softIoc
+  standard_modules: ["asyn", "iocAdmin", "seq"]

@@ -26,7 +26,6 @@ def build_arg_parser(argparser=None) -> argparse.ArgumentParser:
     argparser.add_argument("base_spec_path", type=str, help="Path to base specification")
     argparser.add_argument("paths", nargs="+", type=str, help="Path to module specification")
     argparser.add_argument("--requirements", action="store_true", help="Summarize requirements")
-    # argparser.add_argument("--name", type=str, default="TODO", help="Variable name for what is being inspected")
     return argparser
 
 

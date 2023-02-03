@@ -56,6 +56,8 @@ class Application:
     binary: str
     standard_modules: list[str] = field(default_factory=list)
     extra_modules: list[Module] = field(default_factory=list)
+    requires: Optional[Requirements] = field(default_factory=Requirements)
+    make: Optional[MakeOptions] = field(default_factory=MakeOptions)
 
 
 @dataclass

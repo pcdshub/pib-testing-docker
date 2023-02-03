@@ -16,7 +16,12 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def main(base_spec_path: str, paths: list[str], sync: bool = False, stop_on_failure: bool = True) -> None:
+def main(
+    base_spec_path: str,
+    paths: list[str],
+    sync: bool = False,
+    stop_on_failure: bool = True,
+) -> None:
     specs = Specifications(base_spec_path, paths)
 
     logger.info(
@@ -54,6 +59,17 @@ def main(base_spec_path: str, paths: list[str], sync: bool = False, stop_on_fail
             logger.error("Failed to build: %s", variable)
             if stop_on_failure:
                 raise RuntimeError(f"Failed to build {variable}")
+
+    # finally, applications
+    for spec_path, app in specs.applications.items():
+        path = spec_path.parent
+        logger.info("Building application in %s from %s", path, app)
+        make_opts = app.make or default_make_opts
+
+        if call_make(*make_opts.args, path=path, parallel=make_opts.parallel) != 0:
+            logger.error("Failed to build application in %s", path)
+            if stop_on_failure:
+                raise RuntimeError(f"Failed to build {path}")
 
 
 def build_arg_parser(argparser=None) -> argparse.ArgumentParser:

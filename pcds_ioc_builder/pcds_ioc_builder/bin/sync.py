@@ -3,7 +3,7 @@ import pathlib
 
 from whatrecord.makefile import Dependency, Makefile
 
-from ..makefile import patch_makefile
+from ..makefile import get_makefile_for_path, patch_makefile
 from ..module import (BaseSettings, get_dependency_group_for_module)
 from ..spec import Application, Module, Requirements, SpecificationFile
 
@@ -80,7 +80,7 @@ class Specifications:
     settings: BaseSettings
     specs: dict[pathlib.Path, SpecificationFile]
     modules: list[Module]
-    applications: list[Application]
+    applications: dict[pathlib.Path, Application]
     requirements: Requirements
 
     def __init__(self, base_spec_path: str, paths: list[str]):
@@ -96,15 +96,18 @@ class Specifications:
             )
 
         self.modules = []
-        self.applications = []
+        self.applications = {}
         for path in paths:
-            spec = SpecificationFile.from_filename(path)
+            filename = pathlib.Path(path).expanduser().resolve()
+            spec = SpecificationFile.from_filename(filename)
             for module in spec.modules:
                 self.modules.append(module)
                 if module.requires is not None:
                     add_requirements(self.requirements, module.requires)
             if spec.application is not None:
-                self.applications.append(spec.application)
+                self.applications[filename] = spec.application
+                if spec.application.requires is not None:
+                    add_requirements(self.requirements, spec.application.requires)
 
         self.modules.append(base)
 
@@ -113,7 +116,7 @@ class Specifications:
         # TODO application-level overrides? shouldn't be possible, right?
         # so raise/warn/remove extra modules that are redefined
         yield from self.modules
-        for app in self.applications:
+        for app in self.applications.values():
             yield from app.extra_modules
 
     @property
@@ -148,6 +151,20 @@ class Specifications:
             dep = group.all_modules[group.root]
             logger.info("Updating makefiles in %s", group.root)
             update_related_makefiles(group.root, dep.makefile, variable_to_value=variables)
+
+        for path in self.applications:
+            makefile = get_makefile_for_path(path.parent, epics_base=self.settings.epics_base)
+            # TODO introspection at 2 levels? 'modules' may be the wrong abstraction?
+            # or is (base / modules between / app) not too many layers?
+            #
+            # group = DependencyGroup.from_makefile(
+            #     makefile,
+            #     recurse=recurse,
+            #     variable_name=variable_name or module.variable,
+            #     name=name or module.name,
+            #     keep_os_env=keep_os_env
+            # )
+            update_related_makefiles(path.parent, makefile, variable_to_value=variables)
 
 
 def main(base_spec_path: str, paths: list[str]) -> None:
