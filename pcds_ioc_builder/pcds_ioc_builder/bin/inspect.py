@@ -5,29 +5,27 @@ import json
 
 from typing import Union
 
-from ..spec import SpecificationFile
+from ..spec import Requirements, SpecificationFile
 from ..module import BaseSettings, Inspector, VersionInfo
 from whatrecord.makefile import DependencyGroup, Makefile
 
+from .sync import Specifications
 
-def main(path: Union[pathlib.Path, str], recurse: bool = True) -> None:
-    path = pathlib.Path(path)
-    settings = BaseSettings(
-        epics_base=pathlib.Path("~/Repos/epics-base"),
-        support=pathlib.Path("~/Repos/"),
-        extra_variables={},
-    )
-    inspector = Inspector.from_path(path, settings=settings, recurse=recurse)
-    print(list(inspector.group.all_modules))
-    print(list(inspector.find_all_dependencies()))
-    print(list(inspector.find_all_missing_dependencies()))
+
+def main(base_spec_path: str, paths: list[str], requirements: bool = False) -> None:
+    specs = Specifications(base_spec_path, paths)
+
+    if requirements:
+        reqs = apischema.serialize(Requirements, specs.requirements)
+        print(json.dumps(reqs, indent=2))
 
 
 def build_arg_parser(argparser=None) -> argparse.ArgumentParser:
     if argparser is None:
         argparser = argparse.ArgumentParser()
-    argparser.add_argument("path", type=str, help="Path to module or IOC")
-    argparser.add_argument("--no-recurse", action="store_false", dest="recurse", help="Path to module or IOC")
+    argparser.add_argument("base_spec_path", type=str, help="Path to base specification")
+    argparser.add_argument("paths", nargs="+", type=str, help="Path to module specification")
+    argparser.add_argument("--requirements", action="store_true", help="Summarize requirements")
     # argparser.add_argument("--name", type=str, default="TODO", help="Variable name for what is being inspected")
     return argparser
 

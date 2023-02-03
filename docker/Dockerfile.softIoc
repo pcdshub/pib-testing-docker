@@ -14,10 +14,17 @@ RUN chmod +x /usr/local/bin/micromamba
 USER docker
 
 COPY --chown=docker ./support/mambarc /cds/home/docker/.mambarc
-COPY --chown=docker ./support/bin/* /usr/local/bin/
+# COPY --chown=docker ./support/bin/* /usr/local/bin/
+COPY --chown=docker support/bash_profile /cds/home/docker/.bash_profile
 RUN mkdir ~/micromamba
 
-RUN mamba install python=3.10 jq yq pip
+RUN micromamba shell init --shell=bash --prefix=~/micromamba
+
+SHELL ["/bin/bash", "--login", "-c"]
+
+# From this point on, micromamba will be accessible
+
+RUN micromamba install python=3.10 jq yq pip
 
 ARG MACRO_VERSION=R0.3.1
 RUN git clone --depth 1 --branch=${MACRO_VERSION} \
@@ -27,23 +34,35 @@ RUN git clone --depth 1 --branch=${MACRO_VERSION} \
 COPY --chown=docker ./pcds_ioc_builder /cds/home/docker/pcds-ioc-builder
 RUN python -m pip install ~/pcds-ioc-builder && rm -rf ~/pcds-ioc-builder
 
-# I think we can do base with the builder as well, but I don't want to develop
-# the tools to build base first because of how long it takes to build... (TODO)
-
-WORKDIR /cds/home/docker
-
 WORKDIR /spec
-
-RUN pwd
 
 ARG SPECS=
 # TODO remove; set in previous build
 COPY --chown=docker ${SPECS}/base.yaml /spec/base.yaml
 COPY --chown=docker ${SPECS}/modules.yaml /spec/modules.yaml
 
-RUN find /cds -type d
-RUN pcds-ioc-builder --help
+# RUN pcds-ioc-builder --help
+# RUN pcds-ioc-builder download base.yaml modules.yaml
+RUN echo "pcds-ioc-builder download base.yaml modules.yaml" >> ~/.bash_history
+RUN echo "pcds-ioc-builder build --sync base.yaml modules.yaml" >> ~/.bash_history
+RUN echo "micromamba install \$(pcds-ioc-builder inspect base.yaml modules.yaml --requirements | jq -r '.conda | join(\" \")')" >> ~/.bash_history
+RUN echo "cd /builder && pip install -e ." >> ~/.bash_history
+
+RUN YUM_REQS=$(pcds-ioc-builder inspect base.yaml modules.yaml --requirements | jq -r '.yum | join(" ")') && \
+      if [ -n "$YUM_REQS" ]; then \
+        echo "Installing yum requirements: ${CONDA_REQS}"; \
+        sudo yum -y install ${YUM_REQS}; \
+      fi
+
+RUN CONDA_REQS=$(pcds-ioc-builder inspect base.yaml modules.yaml --requirements | jq -r '.conda | join(" ")') && \
+      if [ -n "$CONDA_REQS" ]; then \
+        echo "Installing conda requirements: ${CONDA_REQS}"; \
+        micromamba install ${CONDA_REQS}; \
+      fi
+
 RUN pcds-ioc-builder download base.yaml modules.yaml
+RUN pcds-ioc-builder build --sync base.yaml modules.yaml
+
 # RUN pcds-ioc-builder build --sync base.yaml modules.yaml
 
 # COPY --chown=docker ./softIoc /ioc

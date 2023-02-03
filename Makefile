@@ -63,7 +63,6 @@ test:
 		--file docker/Dockerfile.softIoc \
 		--progress=plain \
 		.
-	docker run --rm -i test \
-		-v ./pcds-ioc-builder:/builder
+	docker run --rm -v $(shell pwd)/pcds_ioc_builder:/builder -it test
 
 .PHONY: build-builder build-modules build-base build-epics initialize run-ioc all

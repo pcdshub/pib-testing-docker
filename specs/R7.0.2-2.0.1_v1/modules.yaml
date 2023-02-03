@@ -14,6 +14,9 @@ modules:
     git:
       url: https://github.com/slac-epics/seq.git
       tag: R2.2.4-1.2
+    requires:
+      conda:
+        - re2c
   - name: iocAdmin
     variable: IOCADMIN
     git:

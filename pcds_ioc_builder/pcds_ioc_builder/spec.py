@@ -25,12 +25,20 @@ class GitSource:
 
 
 @dataclass
+class Requirements:
+    yum: list[str] = field(default_factory=list)
+    apt: list[str] = field(default_factory=list)
+    conda: list[str] = field(default_factory=list)
+
+
+@dataclass
 class Module:
     name: str
     variable: str = ""
     install_path: Optional[pathlib.Path] = None
     git: Optional[GitSource] = None
     make: Optional[MakeOptions] = field(default_factory=MakeOptions)
+    requires: Optional[Requirements] = field(default_factory=Requirements)
 
     def __post_init__(self):
         if not self.variable:

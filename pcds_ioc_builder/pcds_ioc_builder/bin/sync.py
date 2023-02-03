@@ -5,7 +5,7 @@ from whatrecord.makefile import Dependency, Makefile
 
 from ..makefile import patch_makefile
 from ..module import (BaseSettings, get_dependency_group_for_module)
-from ..spec import Application, Module, SpecificationFile
+from ..spec import Application, Module, Requirements, SpecificationFile
 
 
 import logging
@@ -30,8 +30,19 @@ def update_related_makefiles(
     makefile : Makefile
         The primary Makefile that contains paths of relevant included makefiles.
     """
-    for makefile_relative in makefile.makefile_list:
-        print("saw", base_path, makefile_relative)
+    makefiles = set(makefile.makefile_list)
+
+    # TODO: introspection of some makefiles can error out due to $(error dep not found)
+    # which means we can't check the makefiles to update, which means it's
+    # entirely broken...
+    for path in [
+        "configure/RELEASE",
+        "configure/RELEASE.local",
+    ]:
+        if (base_path / path).exists():
+            makefiles.add(path)
+
+    for makefile_relative in sorted(makefiles):
         makefile_path = (base_path / makefile_relative).resolve()
         try:
             makefile_path.relative_to(base_path)
@@ -51,15 +62,31 @@ def update_related_makefiles(
             logger.exception("Failed to patch makefile: %s", makefile_path)
 
 
+def add_requirements(reqs: Requirements, to_add: Requirements):
+    for req in to_add.apt:
+        if req not in reqs.apt:
+            reqs.apt.append(req)
+
+    for req in to_add.yum:
+        if req not in reqs.yum:
+            reqs.yum.append(req)
+
+    for req in to_add.conda:
+        if req not in reqs.conda:
+            reqs.conda.append(req)
+
+
 class Specifications:
     settings: BaseSettings
     specs: dict[pathlib.Path, SpecificationFile]
     modules: list[Module]
     applications: list[Application]
+    requirements: Requirements
 
     def __init__(self, base_spec_path: str, paths: list[str]):
         base_spec = SpecificationFile.from_filename(base_spec_path)
         base = base_spec.modules_by_name["epics-base"]
+        self.requirements = Requirements()
         self.settings = BaseSettings.from_base_version(base)
 
         if not self.settings.epics_base.exists():
@@ -74,6 +101,8 @@ class Specifications:
             spec = SpecificationFile.from_filename(path)
             for module in spec.modules:
                 self.modules.append(module)
+                if module.requires is not None:
+                    add_requirements(self.requirements, module.requires)
             if spec.application is not None:
                 self.applications.append(spec.application)
 
