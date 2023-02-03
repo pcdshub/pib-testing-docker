@@ -180,8 +180,8 @@ class PcdsBuildPaths:
 
 def get_build_order(
     dependencies: list[Dependency],
-    dependency_to_version: dict[Dependency, VersionInfo],
-    build_first: Optional[list[str]] = None
+    build_first: Optional[list[str]] = None,
+    skip: Optional[list[str]] = None,
 ) -> list[str]:
     """
     Get the build order by variable name.
@@ -193,9 +193,10 @@ def get_build_order(
         should be built.
     """
     # TODO: order based on dependency graph could/should be done efficiently
+    skip = list(skip or [])
     build_order = list(build_first or ["EPICS_BASE"])
-    skip = []
-    remaining = set(variable_to_version) - set(build_order) - set(skip)
+    variable_to_dependency = {str(dep.variable_name): dep for dep in dependencies}
+    remaining = set(variable_to_dependency) - set(build_order) - set(skip)
     last_remaining = None
     remaining_requires = {
         dep: list(

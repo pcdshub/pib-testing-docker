@@ -7,4 +7,4 @@ modules:
       tag: R7.0.2-2.0.1
       args: --recursive
     make:
-      args: -j $(nproc)
+      args: ["-j", "8"]

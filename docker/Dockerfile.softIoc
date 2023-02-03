@@ -44,5 +44,9 @@ COPY --chown=docker ${SPECS}/modules.yaml /spec/modules.yaml
 RUN find /cds -type d
 RUN pcds-ioc-builder --help
 RUN pcds-ioc-builder download base.yaml modules.yaml
-RUN pcds-ioc-builder sync base.yaml modules.yaml
-RUN pcds-ioc-builder build base.yaml modules.yaml
+# RUN pcds-ioc-builder build --sync base.yaml modules.yaml
+
+# COPY --chown=docker ./softIoc /ioc
+# 
+# WORKDIR /ioc
+# RUN pcds-ioc-builder --log=DEBUG build --sync /spec/base.yaml /spec/modules.yaml ./build.yaml

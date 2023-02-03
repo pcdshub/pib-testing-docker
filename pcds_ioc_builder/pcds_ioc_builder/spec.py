@@ -11,7 +11,7 @@ import apischema
 
 @dataclass
 class MakeOptions:
-    args: Optional[str] = ""
+    args: list[str] = field(default_factory=list)
     parallel: int = 1
 
 
@@ -46,12 +46,14 @@ class Module:
 @dataclass
 class Application:
     binary: str
+    standard_modules: list[str] = field(default_factory=list)
+    extra_modules: list[Module] = field(default_factory=list)
 
 
 @dataclass
 class SpecificationFile:
     modules: list[Module] = field(default_factory=list)
-    applications: Optional[list[Application]] = None
+    application: Optional[Application] = None
 
     @property
     def modules_by_name(self) -> dict[str, Module]:

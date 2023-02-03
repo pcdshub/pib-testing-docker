@@ -4,6 +4,11 @@ modules:
     git:
       url: https://github.com/slac-epics/asyn.git
       tag: R2.2.4-1.2
+  - name: ipac
+    variable: IPAC
+    git:
+      url: https://github.com/slac-epics/ipac.git
+      tag: R3.0.0-1.1.4
   - name: seq
     variable: SNCSEQ
     git:

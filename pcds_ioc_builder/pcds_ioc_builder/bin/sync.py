@@ -5,7 +5,7 @@ from whatrecord.makefile import Dependency, Makefile
 
 from ..makefile import patch_makefile
 from ..module import (BaseSettings, get_dependency_group_for_module)
-from ..spec import Module, SpecificationFile
+from ..spec import Application, Module, SpecificationFile
 
 
 import logging
@@ -31,15 +31,16 @@ def update_related_makefiles(
         The primary Makefile that contains paths of relevant included makefiles.
     """
     for makefile_relative in makefile.makefile_list:
+        print("saw", base_path, makefile_relative)
         makefile_path = (base_path / makefile_relative).resolve()
         try:
             makefile_path.relative_to(base_path)
         except ValueError:
-            # logger.debug(
-            #     "Skipping makefile: %s (not relative to %s)",
-            #     makefile_path,
-            #     base_path,
-            # )
+            logger.debug(
+                "Skipping makefile: %s (not relative to %s)",
+                makefile_path,
+                base_path,
+            )
             continue
 
         try:
@@ -54,6 +55,7 @@ class Specifications:
     settings: BaseSettings
     specs: dict[pathlib.Path, SpecificationFile]
     modules: list[Module]
+    applications: list[Application]
 
     def __init__(self, base_spec_path: str, paths: list[str]):
         base_spec = SpecificationFile.from_filename(base_spec_path)
@@ -67,12 +69,23 @@ class Specifications:
             )
 
         self.modules = []
+        self.applications = []
         for path in paths:
             spec = SpecificationFile.from_filename(path)
             for module in spec.modules:
                 self.modules.append(module)
+            if spec.application is not None:
+                self.applications.append(spec.application)
 
         self.modules.append(base)
+
+    @property
+    def all_modules(self):
+        # TODO application-level overrides? shouldn't be possible, right?
+        # so raise/warn/remove extra modules that are redefined
+        yield from self.modules
+        for app in self.applications:
+            yield from app.extra_modules
 
     @property
     def variable_name_to_path(self) -> dict[str, pathlib.Path]:
@@ -88,16 +101,23 @@ class Specifications:
             for var, value in self.variable_name_to_path.items()
         }
 
+    @property
+    def variable_name_to_module(self) -> dict[str, Module]:
+        return {
+            module.variable: module
+            for module in self.all_modules
+        }
+
     def sync(self):
         variables = self.variable_name_to_string
 
         # TODO where do things like this go?
         variables["RE2C"] = "re2c"
 
-        for module in self.modules:
+        for module in self.all_modules:
             group = get_dependency_group_for_module(module, self.settings, recurse=True)
             dep = group.all_modules[group.root]
-            logger.debug("Updating makefiles in %s", group.root)
+            logger.info("Updating makefiles in %s", group.root)
             update_related_makefiles(group.root, dep.makefile, variable_to_value=variables)
 
 
