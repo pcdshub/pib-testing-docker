@@ -96,8 +96,8 @@ class Specifications:
         # TODO application-level overrides? shouldn't be possible, right?
         # so raise/warn/remove extra modules that are redefined
         yield from self.modules
-        for app in self.applications.values():
-            yield from app.extra_modules
+        # for app in self.applications.values():
+        #     yield from app.extra_modules
 
     @property
     def variable_name_to_path(self) -> dict[str, pathlib.Path]:
