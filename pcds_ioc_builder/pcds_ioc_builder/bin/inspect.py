@@ -3,8 +3,8 @@ import json
 
 import apischema
 
+from ..build import Specifications
 from ..spec import Requirements
-from .sync import Specifications
 
 
 def main(paths: list[str], requirements: bool = False) -> None:

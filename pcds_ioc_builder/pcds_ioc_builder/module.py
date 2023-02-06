@@ -239,11 +239,19 @@ def get_dependency_group_for_module(
     )
 
 
-def download_module(module: Module, settings: BaseSettings) -> pathlib.Path:
+def download_module(module: Module, settings: BaseSettings, exist_ok: bool = False) -> pathlib.Path:
     if module.install_path is not None:
         path = module.install_path
     else:
         path = settings.get_path_for_module(module)
+
+    if path.exists():
+        if not path.is_dir():
+            raise RuntimeError(f"File exists where module should go: {path}")
+        if not exist_ok:
+            raise RuntimeError(f"Directories must be empty prior to the download step: {path}")
+
+        raise NotImplementedError("Checking / updating existing download (TODO)?")
 
     if module.git is None:
         raise NotImplementedError("only git-backed modules supported at the moment")
@@ -274,7 +282,7 @@ def find_missing_dependencies(dep: Dependency) -> Generator[tuple[str, pathlib.P
     :func:`VersionInfo.from_path`
     """
     for var, path in list(dep.missing_paths.items()):
-        print("checking missing path", path)
+        logger.debug("Checking missing path: %s", path)
         version_info = VersionInfo.from_path(path)
         if version_info is None:
             logger.debug(

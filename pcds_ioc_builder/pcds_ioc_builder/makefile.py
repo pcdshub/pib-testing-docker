@@ -34,7 +34,11 @@ def get_makefile_for_path(
     )
 
 
-def patch_makefile(makefile: pathlib.Path, variables: dict[str, Any]) -> set[str]:
+def patch_makefile(
+    makefile: pathlib.Path,
+    variables: dict[str, Any],
+    dry_run: bool = False,
+) -> set[str]:
     """
     Patch Makefile variable declarations with those provided in ``variables``.
 
@@ -75,11 +79,12 @@ def patch_makefile(makefile: pathlib.Path, variables: dict[str, Any]) -> set[str
 
     output_lines = [fix_line(line) for line in lines]
     if updated:
-        logger.warning(
-            "Patching makefile %s variables %s", makefile, ", ".join(updated)
+        logger.info(
+            "Patched makefile %s variables: %s", makefile, ", ".join(updated)
         )
-        with open(makefile, "wt") as fp:
-            print("\n".join(output_lines), file=fp)
+        if not dry_run:
+            with open(makefile, "wt") as fp:
+                print("\n".join(output_lines), file=fp)
     else:
         logger.debug("Makefile left unchanged: %s", makefile)
     return updated

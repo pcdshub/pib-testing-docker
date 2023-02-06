@@ -9,7 +9,7 @@ from pcds_ioc_builder.exceptions import (EpicsBaseMissing, EpicsBaseOnlyOnce,
                                          InvalidSpecification)
 
 from .makefile import get_makefile_for_path, update_related_makefiles
-from .module import (BaseSettings, get_build_order,
+from .module import (BaseSettings, download_module, get_build_order,
                      get_dependency_group_for_module)
 from .spec import (Application, MakeOptions, Module, Requirements,
                    SpecificationFile)
@@ -135,42 +135,69 @@ class Specifications:
 
         return variable_to_dep
 
-    def sync(self, skip: Optional[list[str]] = None):
-        skip = list(skip or [])
-        variables = self.variable_name_to_string
 
-        # TODO where do things like this go?
-        variables["RE2C"] = "re2c"
-        logger.debug(
-            "Updating makefiles with the following variables:\n %s",
-            pprint.pformat(variables),
-        )
+def download(
+    specs: Specifications, include_deps: bool = True, skip: Optional[list[str]] = None
+) -> None:
+    skip = list(skip or [])
 
-        for module in self.all_modules:
-            if module.variable in skip:
-                continue
+    for module in specs.modules:
+        if module.variable in skip or module.name in skip:
+            logger.debug("Skipping module: %s", module.name)
+            continue
 
-            group = get_dependency_group_for_module(module, self.settings, recurse=True)
-            dep = group.all_modules[group.root]
-            logger.info("Updating makefiles in %s", group.root)
-            update_related_makefiles(group.root, dep.makefile, variable_to_value=variables)
+        download_module(module, specs.settings)
 
-        for path in self.applications:
-            makefile = get_makefile_for_path(path.parent, epics_base=self.settings.epics_base)
-            # TODO introspection at 2 levels? 'modules' may be the wrong abstraction?
-            # or is (base / modules between / app) not too many layers?
-            #
-            # group = DependencyGroup.from_makefile(
-            #     makefile,
-            #     recurse=recurse,
-            #     variable_name=variable_name or module.variable,
-            #     name=name or module.name,
-            #     keep_os_env=keep_os_env
-            # )
-            update_related_makefiles(path.parent, makefile, variable_to_value=variables)
+    if not include_deps:
+        return
+
+    variable_to_dep = specs.get_variable_to_dependency()
+    print("Overall dependencies:")
+    for variable, dep in variable_to_dep.items():
+        print(f"{variable}: {dep.path}")
+
+    # TODO: this does not yet handle downloading detected dependencies
+    #       that are not in spec files, right?  that is a goal of this tool
+    #       after all... Needs testing/work
 
 
-def build(specs: Specifications, stop_on_failure: bool = True):
+def sync(specs: Specifications, skip: Optional[list[str]] = None):
+    skip = list(skip or [])
+    variables = specs.variable_name_to_string
+
+    # TODO where do things like this go?
+    variables["RE2C"] = "re2c"
+    logger.debug(
+        "Updating makefiles with the following variables:\n %s",
+        pprint.pformat(variables),
+    )
+
+    for module in specs.all_modules:
+        if module.variable in skip or module.name in skip:
+            continue
+
+        group = get_dependency_group_for_module(module, specs.settings, recurse=True)
+        dep = group.all_modules[group.root]
+        logger.info("Updating makefiles in %s", group.root)
+        update_related_makefiles(group.root, dep.makefile, variable_to_value=variables)
+
+    for path in specs.applications:
+        makefile = get_makefile_for_path(path.parent, epics_base=specs.settings.epics_base)
+        # TODO introspection at 2 levels? 'modules' may be the wrong abstraction?
+        # or is (base / modules between / app) not too many layers?
+        #
+        # group = DependencyGroup.from_makefile(
+        #     makefile,
+        #     recurse=recurse,
+        #     variable_name=variable_name or module.variable,
+        #     name=name or module.name,
+        #     keep_os_env=keep_os_env
+        # )
+        update_related_makefiles(path.parent, makefile, variable_to_value=variables)
+
+
+def build(specs: Specifications, stop_on_failure: bool = True, skip: Optional[list[str]] = None):
+    skip = list(skip or [])
     specs.check_settings()
 
     # TODO: what is my plan here? methods on Specifications or
@@ -181,11 +208,10 @@ def build(specs: Specifications, stop_on_failure: bool = True):
     order = get_build_order(list(variable_to_dep.values()), skip=[])
     logger.info("Build order defined: %s", order)
     for variable in order:
-        if variable == "EPICS_BASE":
-            # TODO base not required to skip
+        dep = variable_to_dep[variable]
+        if variable in skip or dep.name in skip:
             continue
 
-        dep = variable_to_dep[variable]
         logger.info("Building: %s from %s", variable, dep.path)
         spec = specs.variable_name_to_module[variable]
         logger.info("Specification file calls for: %s", spec)
