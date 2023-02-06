@@ -45,18 +45,18 @@ COPY --chown=docker ${SPECS}/modules.yaml /spec/modules.yaml
 # RUN pcds-ioc-builder download base.yaml modules.yaml
 RUN echo "pcds-ioc-builder download base.yaml modules.yaml" >> ~/.bash_history
 RUN echo "pcds-ioc-builder build --sync base.yaml modules.yaml" >> ~/.bash_history
-RUN echo "micromamba install \$(pcds-ioc-builder inspect base.yaml modules.yaml --requirements | jq -r '.conda | join(\" \")')" >> ~/.bash_history
+RUN echo "micromamba install \$(pcds-ioc-builder summarize base.yaml modules.yaml --requirements | jq -r '.conda | join(\" \")')" >> ~/.bash_history
 RUN echo "cd /builder && pip install -e ." >> ~/.bash_history
 
-RUN pcds-ioc-builder inspect base.yaml modules.yaml
+RUN pcds-ioc-builder summarize base.yaml modules.yaml
 
-RUN YUM_REQS=$(pcds-ioc-builder inspect base.yaml modules.yaml --requirements | jq -r '.yum | join(" ")') && \
+RUN YUM_REQS=$(pcds-ioc-builder summarize base.yaml modules.yaml --requirements | jq -r '.yum | join(" ")') && \
       if [ -n "$YUM_REQS" ]; then \
         echo "Installing yum requirements: ${CONDA_REQS}"; \
         sudo yum -y install ${YUM_REQS}; \
       fi
 
-RUN CONDA_REQS=$(pcds-ioc-builder inspect base.yaml modules.yaml --requirements | jq -r '.conda | join(" ")') && \
+RUN CONDA_REQS=$(pcds-ioc-builder summarize base.yaml modules.yaml --requirements | jq -r '.conda | join(" ")') && \
       if [ -n "$CONDA_REQS" ]; then \
         echo "Installing conda requirements: ${CONDA_REQS}"; \
         micromamba install ${CONDA_REQS}; \
@@ -64,9 +64,10 @@ RUN CONDA_REQS=$(pcds-ioc-builder inspect base.yaml modules.yaml --requirements 
 
 RUN pcds-ioc-builder download /spec/*.yaml --skip EPICS_BASE
 RUN pcds-ioc-builder sync /spec/*.yaml --skip EPICS_BASE
-# RUN pcds-ioc-builder build --sync /spec/*.yaml --skip EPICS_BASE
+RUN pcds-ioc-builder build --sync /spec/*.yaml --skip EPICS_BASE
 
-# COPY --chown=docker ./softIoc /ioc
-#
-# WORKDIR /ioc
-# RUN pcds-ioc-builder --log=DEBUG build --sync /spec/*.yaml ./build.yaml --skip EPICS_BASE
+COPY --chown=docker ./softIoc /ioc
+
+WORKDIR /ioc
+RUN pcds-ioc-builder --log=DEBUG inspect --sync /spec/*.yaml . --output build.yaml
+RUN pcds-ioc-builder --log=DEBUG build --sync /spec/*.yaml ./build.yaml --skip EPICS_BASE

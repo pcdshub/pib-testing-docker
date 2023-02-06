@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import logging
 import pathlib
 import pprint
+from dataclasses import dataclass, field
 from typing import Optional, Union
 
 from whatrecord.makefile import Dependency
@@ -32,23 +35,21 @@ def add_requirements(reqs: Requirements, to_add: Requirements):
             reqs.conda.append(req)
 
 
+@dataclass
 class Specifications:
-    settings: BaseSettings
-    specs: dict[pathlib.Path, SpecificationFile]
-    modules: list[Module]
-    applications: dict[pathlib.Path, Application]
-    requirements: Requirements
+    settings: BaseSettings = field(default_factory=BaseSettings)
+    specs: dict[pathlib.Path, SpecificationFile] = field(default_factory=dict)
+    modules: list[Module] = field(default_factory=list)
+    applications: dict[pathlib.Path, Application] = field(default_factory=dict)
+    requirements: Requirements = field(default_factory=Requirements)
     base_spec: Optional[Module] = None
 
-    def __init__(self, paths: list[str]):
-        self.modules = []
-        self.applications = {}
-        self.requirements = Requirements()
-        self.settings = BaseSettings()
-        self.base_spec = None
-
+    @classmethod
+    def from_spec_files(cls, paths: list[str]) -> Specifications:
+        inst = cls()
         for path in paths:
-            self.add_spec(path)
+            inst.add_spec(path)
+        return inst
 
     def check_settings(self) -> None:
         if self.base_spec is None:
@@ -107,13 +108,6 @@ class Specifications:
         }
 
     @property
-    def variable_name_to_string(self) -> dict[str, str]:
-        return {
-            var: str(value)
-            for var, value in self.variable_name_to_path.items()
-        }
-
-    @property
     def variable_name_to_module(self) -> dict[str, Module]:
         return {
             module.variable: module
@@ -163,7 +157,7 @@ def download(
 
 def sync(specs: Specifications, skip: Optional[list[str]] = None):
     skip = list(skip or [])
-    variables = specs.variable_name_to_string
+    variables = {var: str(path) for var, path in specs.variable_name_to_path.items()}
 
     # TODO where do things like this go?
     variables["RE2C"] = "re2c"

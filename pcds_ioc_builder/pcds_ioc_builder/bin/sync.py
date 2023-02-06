@@ -11,11 +11,11 @@ def main(
     paths: list[str],
     skip: Optional[list[str]] = None,
 ) -> None:
-    specs = build.Specifications(paths)
+    specs = build.Specifications.from_spec_files(paths)
 
     logger.info(
         "Synchronizing dependencies with these paths:\n    %s",
-        "\n    ".join(f"{var}={value}" for var, value in specs.variable_name_to_string.items())
+        "\n    ".join(f"{var}={value}" for var, value in specs.variable_name_to_path.items())
     )
     build.sync(specs, skip=skip)
 

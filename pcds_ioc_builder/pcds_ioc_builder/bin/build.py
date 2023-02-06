@@ -13,7 +13,7 @@ def main(
     stop_on_failure: bool = True,
     skip: Optional[list[str]] = None,
 ) -> None:
-    specs = build.Specifications(paths)
+    specs = build.Specifications.from_spec_files(paths)
     if sync:
         build.sync(specs)
     build.build(specs, stop_on_failure=stop_on_failure, skip=skip)

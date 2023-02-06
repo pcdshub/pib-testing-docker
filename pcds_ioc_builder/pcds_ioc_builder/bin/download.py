@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 def main(paths: list[str], include_deps: bool = True, skip: Optional[list[str]] = None) -> None:
     skip = list(skip or [])
-    specs = build.Specifications(paths)
+    specs = build.Specifications.from_spec_files(paths)
     build.download(specs, include_deps=include_deps, skip=skip)
 
 
