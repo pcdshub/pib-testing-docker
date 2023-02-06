@@ -1,12 +1,8 @@
 import argparse
-
-from whatrecord.makefile import Dependency
+import logging
 
 from ..build import build
-
 from .sync import Specifications
-
-import logging
 
 logger = logging.getLogger(__name__)
 

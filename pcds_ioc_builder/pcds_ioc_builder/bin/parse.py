@@ -1,6 +1,7 @@
-import apischema
 import argparse
 import json
+
+import apischema
 
 from ..spec import SpecificationFile
 

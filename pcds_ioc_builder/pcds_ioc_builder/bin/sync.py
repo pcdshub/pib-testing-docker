@@ -1,8 +1,7 @@
 import argparse
+import logging
 
 from ..build import Specifications
-
-import logging
 
 logger = logging.getLogger(__name__)
 

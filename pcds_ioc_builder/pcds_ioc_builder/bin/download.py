@@ -1,11 +1,7 @@
 import argparse
 
-from whatrecord.makefile import Dependency
-
-from ..module import (BaseSettings, download_module,
-                      get_dependency_group_for_module)
-from ..spec import SpecificationFile
 from ..build import Specifications
+from ..module import download_module
 
 
 def main(paths: list[str], include_deps: bool = True) -> None:

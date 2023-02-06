@@ -1,12 +1,11 @@
-import pathlib
 import logging
-import subprocess
+import pathlib
 import shlex
+import subprocess
 import sys
 from typing import Optional, Union
 
 from . import util
-
 
 logger = logging.getLogger(__name__)
 

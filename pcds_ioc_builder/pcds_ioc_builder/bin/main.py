@@ -8,11 +8,11 @@ Try:
 import argparse
 import asyncio
 import importlib
-import pathlib
 import logging
 from inspect import iscoroutinefunction
 
 import pcds_ioc_builder
+
 from ..util import MODULE_PATH
 
 DESCRIPTION = __doc__

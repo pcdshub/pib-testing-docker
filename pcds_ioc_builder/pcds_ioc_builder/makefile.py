@@ -1,9 +1,8 @@
 import logging
 import pathlib
-
 from typing import Any, Optional
-from whatrecord.makefile import Makefile
 
+from whatrecord.makefile import Makefile
 
 logger = logging.getLogger(__name__)
 

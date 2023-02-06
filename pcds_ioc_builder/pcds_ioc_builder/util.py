@@ -1,12 +1,10 @@
-import pathlib
-import subprocess
-import threading
-import shlex
-import sys
-from typing import Optional
-
 import logging
-
+import pathlib
+import shlex
+import subprocess
+import sys
+import threading
+from typing import Optional
 
 MODULE_PATH = pathlib.Path(__file__).resolve().parent
 

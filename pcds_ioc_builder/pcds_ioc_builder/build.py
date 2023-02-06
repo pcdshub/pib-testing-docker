@@ -3,7 +3,10 @@ import pathlib
 import pprint
 from typing import Optional, Union
 
-from pcds_ioc_builder.exceptions import EpicsBaseMissing, EpicsBaseOnlyOnce, InvalidSpecification
+from whatrecord.makefile import Dependency
+
+from pcds_ioc_builder.exceptions import (EpicsBaseMissing, EpicsBaseOnlyOnce,
+                                         InvalidSpecification)
 
 from .makefile import get_makefile_for_path, update_related_makefiles
 from .module import (BaseSettings, get_build_order,
@@ -11,9 +14,6 @@ from .module import (BaseSettings, get_build_order,
 from .spec import (Application, MakeOptions, Module, Requirements,
                    SpecificationFile)
 from .util import call_make
-
-from whatrecord.makefile import Dependency
-
 
 logger = logging.getLogger(__name__)
 

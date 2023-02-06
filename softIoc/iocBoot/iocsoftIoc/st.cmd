@@ -7,7 +7,7 @@
 
 ## Register all support components
 dbLoadDatabase("../../dbd/softIoc.dbd",0,0)
-softIoc_registerRecordDeviceDriver(pdbbase) 
+softIoc_registerRecordDeviceDriver(pdbbase)
 
 ## Load record instances
 dbLoadRecords("../../db/softIoc.db","user=klauer")

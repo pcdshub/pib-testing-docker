@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import pathlib
-import yaml
-
 from dataclasses import dataclass, field
 from typing import Optional
 
 import apischema
+import yaml
 
 
 @dataclass

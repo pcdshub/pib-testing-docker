@@ -1,14 +1,9 @@
-import apischema
-import pathlib
 import argparse
 import json
 
-from typing import Union
+import apischema
 
-from ..spec import Requirements, SpecificationFile
-from ..module import BaseSettings, Inspector, VersionInfo
-from whatrecord.makefile import DependencyGroup, Makefile
-
+from ..spec import Requirements
 from .sync import Specifications
 
 
