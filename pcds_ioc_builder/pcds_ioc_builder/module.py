@@ -5,7 +5,7 @@ import logging
 import pathlib
 import shlex
 import re
-from dataclasses import dataclass
+from dataclasses import field, dataclass
 from typing import ClassVar, Optional, Generator
 
 from whatrecord.makefile import Dependency, DependencyGroup, Makefile
@@ -24,9 +24,9 @@ EPICS_SITE_TOP = pathlib.Path("/cds/group/pcds/epics")
 
 @dataclass
 class BaseSettings:
-    epics_base: pathlib.Path
-    support: pathlib.Path
-    extra_variables: dict[str, str]
+    epics_base: pathlib.Path = field(default_factory=pathlib.Path)
+    support: pathlib.Path = field(default_factory=pathlib.Path)
+    extra_variables: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self):
         self.epics_base = self.epics_base.expanduser().resolve()
@@ -152,30 +152,6 @@ class VersionInfo:
     #         f"{prefix_name}{key}": value
     #         for key, value in res.items()
     #     }
-
-
-@dataclass
-class PcdsBuildPaths:
-    #: Path to epics-base.
-    epics_base: pathlib.Path = pathlib.Path("/cds/group/pcds/epics/base/R7.0.2-2.0")
-    #: Path to where epics-base and modules are contained.
-    epics_site_top: pathlib.Path = pathlib.Path("/cds/group/pcds/")
-    #: Path to where this specific epics-base has its modules.
-    epics_modules: pathlib.Path = pathlib.Path("/cds/group/pcds/epics/R7.0.2-2.0/modules")
-
-    def to_variables(self) -> dict[str, str]:
-        """
-        Generate a dictionary of variable-to-string-value.
-
-        Returns
-        -------
-        dict[str, str]
-            ```{"EPICS_BASE": "/path/to/epics-base/", ...}```
-        """
-        return {
-            var.upper(): str(value.resolve())
-            for var, value in dataclasses.asdict(self).items()
-        }
 
 
 def get_build_order(

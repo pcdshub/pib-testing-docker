@@ -36,7 +36,8 @@ def clone(
 ) -> int:
     template_args = []
     if insert_template:
-        git_template_path = util.MODULE_PATH / "git-template"
+        git_template_path = util.MODULE_PATH / "git_template"
+        assert git_template_path.exists()
         template_args = [f"--template={git_template_path}"]
 
     return run_git(

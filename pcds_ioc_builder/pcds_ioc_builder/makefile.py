@@ -84,3 +84,52 @@ def patch_makefile(makefile: pathlib.Path, variables: dict[str, Any]) -> set[str
     else:
         logger.debug("Makefile left unchanged: %s", makefile)
     return updated
+
+
+def update_related_makefiles(
+    base_path: pathlib.Path,
+    makefile: Makefile,
+    variable_to_value: dict[str, str],
+):
+    """
+    Update makefiles found during the introspection step that exist in ``base_path``.
+
+    Updates module dependency paths based.
+
+    Parameters
+    ----------
+    base_path : pathlib.Path
+        The path to update makefiles under.
+    makefile : Makefile
+        The primary Makefile that contains paths of relevant included makefiles.
+    """
+    makefiles = set(makefile.makefile_list)
+
+    # TODO: introspection of some makefiles can error out due to $(error dep not found)
+    # which means we can't check the makefiles to update, which means it's
+    # entirely broken...
+    for path in [
+        "configure/RELEASE",
+        "configure/RELEASE.local",
+    ]:
+        if (base_path / path).exists():
+            makefiles.add(path)
+
+    for makefile_relative in sorted(makefiles):
+        makefile_path = (base_path / makefile_relative).resolve()
+        try:
+            makefile_path.relative_to(base_path)
+        except ValueError:
+            logger.debug(
+                "Skipping makefile: %s (not relative to %s)",
+                makefile_path,
+                base_path,
+            )
+            continue
+
+        try:
+            patch_makefile(makefile_path, variable_to_value)
+        except PermissionError:
+            logger.error("Failed to patch makefile due to permissions: %s", makefile_path)
+        except Exception:
+            logger.exception("Failed to patch makefile: %s", makefile_path)

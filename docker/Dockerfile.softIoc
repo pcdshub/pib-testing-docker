@@ -61,7 +61,7 @@ RUN CONDA_REQS=$(pcds-ioc-builder inspect base.yaml modules.yaml --requirements 
       fi
 
 RUN pcds-ioc-builder download base.yaml modules.yaml
-RUN pcds-ioc-builder build --sync base.yaml modules.yaml
+# RUN pcds-ioc-builder build --sync base.yaml modules.yaml
 
 # RUN pcds-ioc-builder build --sync base.yaml modules.yaml
 

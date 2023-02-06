@@ -12,8 +12,8 @@ from whatrecord.makefile import DependencyGroup, Makefile
 from .sync import Specifications
 
 
-def main(base_spec_path: str, paths: list[str], requirements: bool = False) -> None:
-    specs = Specifications(base_spec_path, paths)
+def main(paths: list[str], requirements: bool = False) -> None:
+    specs = Specifications(paths)
 
     if requirements:
         reqs = apischema.serialize(Requirements, specs.requirements)
@@ -23,7 +23,6 @@ def main(base_spec_path: str, paths: list[str], requirements: bool = False) -> N
 def build_arg_parser(argparser=None) -> argparse.ArgumentParser:
     if argparser is None:
         argparser = argparse.ArgumentParser()
-    argparser.add_argument("base_spec_path", type=str, help="Path to base specification")
     argparser.add_argument("paths", nargs="+", type=str, help="Path to module specification")
     argparser.add_argument("--requirements", action="store_true", help="Summarize requirements")
     return argparser
