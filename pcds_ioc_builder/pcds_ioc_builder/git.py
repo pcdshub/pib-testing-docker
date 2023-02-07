@@ -52,7 +52,8 @@ def clone(
 
 
 def run_git(*args, cwd: Optional[Union[pathlib.Path, str]] = None, **call_kwargs) -> int:
-    call_kwargs["cwd"] = str(cwd or pathlib.Path.cwd())
+    cwd = cwd or pathlib.Path.cwd()
+    call_kwargs["cwd"] = str(cwd)
     shell_cmd = shlex.join(["git", *args])
     logger.debug("Running '%s' in %s", shell_cmd, cwd)
     sys.stdout.flush()

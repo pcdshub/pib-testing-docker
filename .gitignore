@@ -2,3 +2,6 @@ softIoc/bin
 O.*
 dbd/
 db/
+/pcds_ioc_builder/build
+/pcds_ioc_builder/dist
+*.egg_info

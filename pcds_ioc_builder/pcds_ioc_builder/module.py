@@ -113,8 +113,9 @@ class VersionInfo:
 
     def to_module(self, variable_name: str) -> Module:
         return Module(
+            name=self.name,
             variable=variable_name,
-            install_path=self.path,
+            # install_path=self.path,  # if include_path
             git=GitSource(
                 url=f"https://github.com/slac-epics/{self.name}",
                 tag=self.tag,
@@ -132,25 +133,12 @@ class VersionInfo:
             return cls(**match.groupdict())
         return None
 
-    # def to_cue(self, variable_name: str) -> dict[str, Any]:
-    #     prefix_name = variable_name
-    #     default_owner = cue.setup.get("REPOOWNER", "slac-epics")
-    #     res = {
-    #         "": self.tag or "master",
-    #         "_DIRNAME": self.name,
-    #         "_REPONAME": repo_name_overrides.get(self.name, self.name),
-    #         "_REPOOWNER": repo_owner_overrides.get(default_owner, default_owner),
-    #         "_VARNAME": variable_name,  # for RELEASE.local
-    #         "_RECURSIVE": "YES",
-    #         "_DEPTH": "-1",
-    #     }
-    #     res["_REPOURL"] = "https://github.com/{_REPOOWNER}/{_REPONAME}.git".format(
-    #         **res
-    #     )
-    #     return {
-    #         f"{prefix_name}{key}": value
-    #         for key, value in res.items()
-    #     }
+
+@dataclass
+class MissingDependency:
+    variable: str
+    path: pathlib.Path
+    version: Optional[VersionInfo]
 
 
 def get_build_order(
@@ -245,6 +233,7 @@ def download_module(module: Module, settings: BaseSettings, exist_ok: bool = Fal
     else:
         path = settings.get_path_for_module(module)
 
+    print("path for module", path)
     if path.exists():
         if not path.is_dir():
             raise RuntimeError(f"File exists where module should go: {path}")
@@ -271,7 +260,7 @@ def download_module(module: Module, settings: BaseSettings, exist_ok: bool = Fal
     return path
 
 
-def find_missing_dependencies(dep: Dependency) -> Generator[tuple[str, pathlib.Path, VersionInfo], None, None]:
+def find_missing_dependencies(dep: Dependency) -> Generator[MissingDependency, None, None]:
     """
     Using module path conventions, find all missing dependencies.
 
@@ -284,9 +273,13 @@ def find_missing_dependencies(dep: Dependency) -> Generator[tuple[str, pathlib.P
     for var, path in list(dep.missing_paths.items()):
         logger.debug("Checking missing path: %s", path)
         version_info = VersionInfo.from_path(path)
+        missing = MissingDependency(
+            variable=var,
+            path=path,
+            version=version_info,
+        )
         if version_info is None:
-            logger.debug(
-                "Dependency path for %s=%s does not match known patterns", var, path
-            )
+            logger.debug("Dependency path for %s=%s does not match known patterns", var, path)
         else:
-            yield var, path, version_info
+            logger.debug("Missing path matches version information: %s", version_info)
+        yield missing

@@ -25,6 +25,7 @@
 ASYN=/cds/group/pcds/epics/R7.0.2-2.0/modules/asyn/R2.2.4-1.2
 IOCADMIN=/cds/group/pcds/epics/R7.0.2-2.0/modules/iocAdmin/R3.1.16-1.3.2
 SNCSEQ=/cds/group/pcds/epics/R7.0.2-2.0/modules/seq/R2.2.4-1.2
+CALC=/cds/group/pcds/epics/R7.0.2-2.0/modules/calc/R3.7-1.0.1
 
 # EPICS_BASE should appear last so earlier modules can override stuff:
 EPICS_BASE=/cds/group/pcds/epics/base/R7.0.2-2.0
