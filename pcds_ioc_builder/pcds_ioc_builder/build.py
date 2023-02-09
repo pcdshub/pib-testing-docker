@@ -4,16 +4,16 @@ import logging
 import pathlib
 import pprint
 from dataclasses import dataclass, field
-from typing import Optional, Union
+from typing import Generator, Optional, Union
 
-from whatrecord.makefile import Dependency
+from whatrecord.makefile import Dependency, DependencyGroup
 
-from pcds_ioc_builder.exceptions import (EpicsBaseMissing, EpicsBaseOnlyOnce,
-                                         InvalidSpecification)
-
+from .exceptions import (EpicsBaseMissing, EpicsBaseOnlyOnce,
+                         InvalidSpecification)
 from .makefile import get_makefile_for_path, update_related_makefiles
-from .module import (BaseSettings, download_module, get_build_order,
-                     get_dependency_group_for_module)
+from .module import (BaseSettings, MissingDependency, VersionInfo,
+                     download_module, find_missing_dependencies,
+                     get_build_order, get_dependency_group_for_module)
 from .spec import (Application, MakeOptions, Module, Requirements,
                    SpecificationFile)
 from .util import call_make
@@ -114,6 +114,14 @@ class Specifications:
             for module in self.all_modules
         }
 
+    @property
+    def variables_to_sync(self) -> dict[str, str]:
+        variables = dict(self.settings.variables)
+        for var, path in self.variable_name_to_path.items():
+            variables[var] = str(path)
+
+        return variables
+
     def get_variable_to_dependency(self) -> dict[str, Dependency]:
         # TODO multiple version specification handling required
         # allow override, etc?
@@ -130,9 +138,36 @@ class Specifications:
         return variable_to_dep
 
 
-def download(
-    specs: Specifications, include_deps: bool = True, skip: Optional[list[str]] = None
+def create_release_site(
+    specs: Specifications,
+    extra_variables: Optional[dict[str, str]] = None
+) -> pathlib.Path:
+    release_site = specs.settings.support / "RELEASE_SITE"
+
+    variables = {
+        "EPICS_BASE": str(specs.settings.epics_base),
+        "SUPPORT": str(specs.settings.support),
+        "EPICS_MODULES": str(specs.settings.support),
+    }
+    if extra_variables:
+        variables.update(extra_variables)
+
+    with open(release_site, mode="wt") as fp:
+        for variable, value in variables.items():
+            print(f"{variable}={value}", file=fp)
+
+    return release_site
+
+
+def download_spec_modules(
+    specs: Specifications,
+    include_deps: bool = True,
+    skip: Optional[list[str]] = None,
+    exist_ok: bool = True,
 ) -> None:
+    """
+    Download modules with the versions listed in the specifications files.
+    """
     skip = list(skip or [])
 
     for module in specs.modules:
@@ -140,7 +175,7 @@ def download(
             logger.debug("Skipping module: %s", module.name)
             continue
 
-        download_module(module, specs.settings)
+        download_module(module, specs.settings, exist_ok=exist_ok)
 
     if not include_deps:
         return
@@ -150,44 +185,47 @@ def download(
     for variable, dep in variable_to_dep.items():
         print(f"{variable}: {dep.path}")
 
-    # TODO: this does not yet handle downloading detected dependencies
-    #       that are not in spec files, right?  that is a goal of this tool
-    #       after all... Needs testing/work
+
+def sync_module(specs: Specifications, module: Module):
+    group = get_dependency_group_for_module(module, specs.settings, recurse=True)
+    dep = group.all_modules[group.root]
+    logger.info("Updating makefiles in %s", group.root)
+    update_related_makefiles(group.root, dep.makefile, variable_to_value=specs.variables_to_sync)
+
+
+def sync_path(specs: Specifications, path: pathlib.Path, extras: Optional[dict[str, str]] = None):
+    makefile = get_makefile_for_path(path, epics_base=specs.settings.epics_base)
+    # TODO introspection at 2 levels? 'modules' may be the wrong abstraction?
+    # or is (base / modules between / app) not too many layers?
+    #
+    # group = DependencyGroup.from_makefile(
+    #     makefile,
+    #     recurse=recurse,
+    #     variable_name=variable_name or module.variable,
+    #     name=name or module.name,
+    #     keep_os_env=keep_os_env
+    # )
+    variables = dict(specs.variables_to_sync)
+    variables.update(extras or {})
+    update_related_makefiles(path, makefile, variable_to_value=variables)
 
 
 def sync(specs: Specifications, skip: Optional[list[str]] = None):
     skip = list(skip or [])
-    variables = {var: str(path) for var, path in specs.variable_name_to_path.items()}
 
-    # TODO where do things like this go?
-    variables["RE2C"] = "re2c"
     logger.debug(
         "Updating makefiles with the following variables:\n %s",
-        pprint.pformat(variables),
+        pprint.pformat(specs.variables_to_sync),
     )
 
     for module in specs.all_modules:
         if module.variable in skip or module.name in skip:
             continue
 
-        group = get_dependency_group_for_module(module, specs.settings, recurse=True)
-        dep = group.all_modules[group.root]
-        logger.info("Updating makefiles in %s", group.root)
-        update_related_makefiles(group.root, dep.makefile, variable_to_value=variables)
+        sync_module(specs, module)
 
-    for path in specs.applications:
-        makefile = get_makefile_for_path(path.parent, epics_base=specs.settings.epics_base)
-        # TODO introspection at 2 levels? 'modules' may be the wrong abstraction?
-        # or is (base / modules between / app) not too many layers?
-        #
-        # group = DependencyGroup.from_makefile(
-        #     makefile,
-        #     recurse=recurse,
-        #     variable_name=variable_name or module.variable,
-        #     name=name or module.name,
-        #     keep_os_env=keep_os_env
-        # )
-        update_related_makefiles(path.parent, makefile, variable_to_value=variables)
+    for app_spec_path in specs.applications:
+        sync_path(specs, app_spec_path.parent)
 
 
 def build(specs: Specifications, stop_on_failure: bool = True, skip: Optional[list[str]] = None):
@@ -226,3 +264,178 @@ def build(specs: Specifications, stop_on_failure: bool = True, skip: Optional[li
             logger.error("Failed to build application in %s", path)
             if stop_on_failure:
                 raise RuntimeError(f"Failed to build {path}")
+
+
+@dataclass
+class RecursiveInspector:
+    """
+    Inspector tool which can:
+    1. Introspect modules/IOCs for missing dependencies
+    2. Download missing dependencies
+    3. Recurse to (1)
+    """
+    specs: Specifications
+    new_specs: Specifications
+    inspect_path: pathlib.Path
+    group: DependencyGroup
+
+    @classmethod
+    def from_path(cls, path: pathlib.Path, specs: Specifications):
+        path = path.expanduser().resolve()
+        if path.parts[-1] == "Makefile":
+            path = path.parent
+
+        inspector = cls(
+            specs=specs,
+            inspect_path=path,
+            group=DependencyGroup(root=path),
+            new_specs=Specifications(settings=specs.settings)
+        )
+        inspector.add_dependency(
+            name="ioc",
+            variable_name="",
+            path=path,
+            build=False,
+        )
+        return inspector
+
+    @property
+    def target_dependency(self) -> Dependency:
+        return self.group.all_modules[self.group.root]
+
+    @property
+    def makefile_path(self) -> pathlib.Path:
+        return self.inspect_path / "Makefile"
+
+    def add_dependency(
+        self,
+        name: str,
+        variable_name: str,
+        path: pathlib.Path,
+        # reset_configure: bool = True,
+        build: bool = False,
+    ) -> Dependency:
+        """
+        Add a dependency identified by its variable name and version tag.
+
+        Parameters
+        ----------
+        variable_name : str
+            The Makefile-defined variable for the dependency.
+        version : VersionInfo
+            The version information for the dependency, either derived by way
+            of introspection or manually.
+        reset_configure : bool, optional
+            Reset module/configure/* to the git HEAD, if changed.
+            (TODO) also reset modules/RELEASE.local
+
+        Returns
+        -------
+        Dependency
+            The whatrecord-generated :class:`Dependency`.
+        """
+        logger.info("Adding dependency %s: %s", variable_name, path)
+
+        logger.debug("Synchronizing dependency variables")
+        sync_path(self.specs, path, extras=self.new_specs.variables_to_sync)
+
+        logger.debug("Introspecting dependency makefile, adding it to the DependencyGroup")
+        makefile = get_makefile_for_path(
+            path,
+            epics_base=self.specs.settings.epics_base,
+            variables=self.specs.settings.variables,
+        )
+        return Dependency.from_makefile(
+            makefile,
+            recurse=True,
+            name=name,
+            variable_name=variable_name,
+            root=self.group,  # <-- NOTE: this implicitly adds the dep to self.group
+        )
+
+    def find_all_dependencies(self) -> Generator[Dependency, None, None]:
+        """
+        Iterate over all dependencies.
+
+        The caller is allowed to mutate the "all_modules" dictionary between
+        each iteration.  Dependencies are keyed on variable names.
+        """
+        checked = set()
+
+        def done() -> bool:
+            return all(
+                dep.variable_name in checked
+                for dep in self.group.all_modules.values()
+            )
+
+        while not done():
+            deps = list(self.group.all_modules.values())
+            for dep in deps:
+                if dep.variable_name in checked:
+                    continue
+                checked.add(dep.variable_name)
+                yield dep
+
+    def find_dependencies_to_download(self) -> Generator[MissingDependency, None, None]:
+        for dep in self.find_all_dependencies():
+            logger.debug(
+                (
+                    "Checking module %s for all dependencies. \n"
+                    "\nExisting dependencies:\n"
+                    "    %s"
+                    "\nMissing paths: \n"
+                    "    %s"
+                ),
+                dep.variable_name or "this IOC",
+                "\n    ".join(f"{var}={value}" for var, value in dep.dependencies.items()),
+                "\n    ".join(f"{var}={value}" for var, value in dep.missing_paths.items()),
+            )
+
+            for missing_dep in find_missing_dependencies(dep):
+                yield missing_dep
+
+    def download_missing_dependencies(self):
+        """
+        Using module path conventions, find all dependencies and check them
+        out to the cache directory.
+
+        See Also
+        --------
+        :func:`VersionInfo.from_path`
+        """
+        logger.debug(
+            (
+                "Checking the primary target for dependencies using EPICS build system. \n"
+                "\nExisting dependencies:\n"
+                "    %s"
+                "\nMissing paths: \n"
+                "    %s"
+            ),
+            "\n    ".join(f"{var}={value}" for var, value in self.target_dependency.dependencies.items()),
+            "\n    ".join(f"{var}={value}" for var, value in self.target_dependency.missing_paths.items()),
+        )
+        self.specs.check_settings()
+
+        # spec_variable_to_dep = self.specs.get_variable_to_dependency()
+        # 1. We need to download missing dependencies
+        # 2. We need to inspect those dependencies
+        # 3. We need to add those dependencies (and sub-deps) to the new_specs list
+        for missing_dep in self.find_dependencies_to_download():
+            if missing_dep.version is None:
+                # logger.warning("Dependency %s doesn't match version standards...", missing_dep)
+                continue
+
+            module = missing_dep.version.to_module(missing_dep.variable)
+            module_path = download_module(module, self.specs.settings)
+            self.add_dependency(module.name, module.variable, module_path, build=False)
+
+    @property
+    def variable_to_version(self) -> dict[str, VersionInfo]:
+        res = {}
+        for path, dep in self.group.all_modules.items():
+            if not dep.variable_name:
+                continue
+
+            # We downloaded these to the correct paths; they must match...
+            res[dep.variable_name] = VersionInfo.from_path(path)
+        return res

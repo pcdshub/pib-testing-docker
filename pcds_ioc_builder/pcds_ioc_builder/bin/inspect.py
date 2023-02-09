@@ -5,11 +5,9 @@ import sys
 
 import apischema
 import yaml
-from whatrecord.makefile import DependencyGroup, pathlib
+from whatrecord.makefile import pathlib
 
 from .. import build
-from ..makefile import get_makefile_for_path
-from ..module import VersionInfo, download_module, find_missing_dependencies
 from ..spec import Application, SpecificationFile
 
 logger = logging.getLogger(__name__)
@@ -40,60 +38,15 @@ def main(
 
     logger.debug("Checking for makefile in path: %s", ioc_path)
     logger.debug("EPICS base path for introspection: %s (%s)", specs.settings.epics_base, specs.settings)
-    makefile = get_makefile_for_path(ioc_path, epics_base=specs.settings.epics_base)
 
-    group = DependencyGroup.from_makefile(makefile, name=name, variable_name=variable_name)
+    inspector = build.RecursiveInspector.from_path(ioc_path, specs)
+    inspector.download_missing_dependencies()
 
-    # TODO, this needs to recurse newly-downloaded dependencies (optionally?)
-    missing = list(find_missing_dependencies(group.all_modules[group.root]))
-    logger.debug("Found %d missing dep(s)", len(missing))
-
-    for missing_dep in missing:
-        if missing_dep.variable in specs.variable_name_to_module:
-            logger.info("Found existing module; using packaged version: %s", missing_dep.variable)
-            app.standard_modules.append(missing_dep.variable)
-            continue
-
-        if missing_dep.version is None:
-            continue
-
-        # TODO: the other possibility is a mistaken variable name, where we might
-        # need VersionInfo to grab the repository name and correct the variable
-        # name
-
-        module = missing_dep.version.to_module(name)
-        target_path = specs.settings.get_path_for_module(module)
-        logger.debug("Installing to %s %s", target_path, module)
-        if not target_path.exists():
-            if not download:
-                logger.warning("Not downloading dependency %s due to --no-download flag", module)
-            else:
-                module.install_path = target_path
-                download_module(module, specs.settings)
-
-        extra_modules.append(module)
-
-    for path, dep in group.all_modules.items():
-        if path == group.root:
-            # Skip the IOC itself
-            continue
-
-        # Paths that already exist (already fixed Makefile?)
-        if dep.variable_name in specs.variable_name_to_module:
-            logger.info("Found existing module; using packaged version: %s", dep.variable_name)
-            app.standard_modules.append(dep.variable_name)
+    for variable, version in inspector.variable_to_version.items():
+        if variable in specs.variable_name_to_module:
+            app.standard_modules.append(variable)
         else:
-            version = VersionInfo.from_path(path)
-            if version is None:
-                logger.warning(
-                    "Existing path that does not follow known versioning standards: %s; skipping.",
-                    path
-                )
-                continue
-
-            assert dep.variable_name is not None
-            module = version.to_module(dep.variable_name)
-            extra_modules.append(module)
+            extra_modules.append(version.to_module(variable))
 
     file = SpecificationFile(
         application=app,

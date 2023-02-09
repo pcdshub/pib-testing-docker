@@ -67,7 +67,7 @@ def patch_makefile(
                 line = line.rstrip()
                 var, _ = line.split(separator, 1)
                 var = var.strip()
-                if var in variables:
+                if var and var in variables:
                     fixed = f"{var}{separator}{variables[var]}"
                     updated.add(var)
                     return fixed

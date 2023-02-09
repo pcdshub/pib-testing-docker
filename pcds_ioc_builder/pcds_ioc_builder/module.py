@@ -83,6 +83,10 @@ class BaseSettings:
     def variables(self) -> dict[str, str]:
         variables = {
             "EPICS_BASE": str(self.epics_base),
+            # TODO where do things like this go?
+            # "EPICS_MODULES": str(self.support),
+            # "SUPPORT": str(self.support),
+            "RE2C": "re2c",
         }
         variables.update(self.extra_variables)
         return variables
@@ -233,14 +237,14 @@ def download_module(module: Module, settings: BaseSettings, exist_ok: bool = Fal
     else:
         path = settings.get_path_for_module(module)
 
-    print("path for module", path)
     if path.exists():
         if not path.is_dir():
             raise RuntimeError(f"File exists where module should go: {path}")
         if not exist_ok:
             raise RuntimeError(f"Directories must be empty prior to the download step: {path}")
 
-        raise NotImplementedError("Checking / updating existing download (TODO)?")
+        # raise NotImplementedError("Checking / updating existing download (TODO)?")
+        return path
 
     if module.git is None:
         raise NotImplementedError("only git-backed modules supported at the moment")
