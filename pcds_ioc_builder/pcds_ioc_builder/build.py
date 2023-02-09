@@ -181,7 +181,7 @@ def download_spec_modules(
         return
 
     variable_to_dep = specs.get_variable_to_dependency()
-    print("Overall dependencies:")
+    print("Dependencies from specification files:")
     for variable, dep in variable_to_dep.items():
         print(f"{variable}: {dep.path}")
 
