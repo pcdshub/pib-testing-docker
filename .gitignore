@@ -5,3 +5,4 @@ db/
 /pcds_ioc_builder/build
 /pcds_ioc_builder/dist
 *.egg_info
+/test-iocs

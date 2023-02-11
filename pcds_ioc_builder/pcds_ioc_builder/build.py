@@ -9,7 +9,7 @@ from typing import Generator, Optional, Union
 from whatrecord.makefile import Dependency, DependencyGroup
 
 from .exceptions import (EpicsBaseMissing, EpicsBaseOnlyOnce,
-                         InvalidSpecification)
+                         InvalidSpecification, TargetDirectoryAlreadyExists)
 from .makefile import get_makefile_for_path, update_related_makefiles
 from .module import (BaseSettings, MissingDependency, VersionInfo,
                      download_module, find_missing_dependencies,
@@ -426,7 +426,13 @@ class RecursiveInspector:
                 continue
 
             module = missing_dep.version.to_module(missing_dep.variable)
-            module_path = download_module(module, self.specs.settings)
+
+            try:
+                module_path = download_module(module, self.specs.settings)
+            except TargetDirectoryAlreadyExists as ex:
+                logger.info("%s already exists on disk. Assuming it's up-to-date", module.name)
+                module_path = ex.path
+
             self.add_dependency(module.name, module.variable, module_path, build=False)
 
     @property

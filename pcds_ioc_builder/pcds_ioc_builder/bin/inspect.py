@@ -54,6 +54,8 @@ def main(
     )
     serialized = apischema.serialize(SpecificationFile, file, exclude_defaults=True, exclude_none=True)
     result = yaml.dump(serialized, indent=2, sort_keys=False)
+
+    logger.debug("Writing to %s:\n'''\n%s\n'''", output, result)
     output.write(result)
 
     if output is not sys.stdout:

@@ -10,7 +10,7 @@ from typing import ClassVar, Generator, Optional
 from whatrecord.makefile import Dependency, DependencyGroup, Makefile
 
 from . import git
-from .exceptions import DownloadFailure
+from .exceptions import DownloadFailure, TargetDirectoryAlreadyExists
 from .makefile import get_makefile_for_path
 from .spec import GitSource, Module
 
@@ -106,7 +106,11 @@ class VersionInfo:
             r"(?P<name>[^/]+)/"
             r"(?P<tag>[^/]+)/?"
         )
-        for base_path in ("/cds/group/pcds/epics", "/reg/g/pcds/epics")
+        for base_path in (
+            "/cds/group/pcds/epics",
+            "/reg/g/pcds/epics",
+            "/reg/g/pcds/package/epics",
+        )
     ]
 
     @property
@@ -241,7 +245,9 @@ def download_module(module: Module, settings: BaseSettings, exist_ok: bool = Fal
         if not path.is_dir():
             raise RuntimeError(f"File exists where module should go: {path}")
         if not exist_ok:
-            raise RuntimeError(f"Directories must be empty prior to the download step: {path}")
+            ex = TargetDirectoryAlreadyExists(f"Directories must be empty prior to the download step: {path}")
+            ex.path = path
+            raise ex
 
         # raise NotImplementedError("Checking / updating existing download (TODO)?")
         return path
@@ -252,6 +258,7 @@ def download_module(module: Module, settings: BaseSettings, exist_ok: bool = Fal
     logger.info("Downloading module %s to %s", module.name, path)
     if git.clone(
         module.git.url,
+        branch_or_tag=module.version,  # or module.git.tag?
         to_path=path,
         depth=module.git.depth,
         recursive=module.git.recursive,

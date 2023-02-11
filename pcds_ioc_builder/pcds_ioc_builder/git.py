@@ -28,6 +28,7 @@ def reset_repo_directory(repo_root: pathlib.Path, directory: str):
 def clone(
     repository: str,
     to_path: pathlib.Path,
+    branch_or_tag: Optional[str] = None,
     depth: int = 1,
     recursive: bool = True,
     insert_template: bool = True,
@@ -39,6 +40,16 @@ def clone(
         assert git_template_path.exists()
         template_args = [f"--template={git_template_path}"]
 
+    branch_args = []
+    if branch_or_tag:
+        branch_args.extend(
+            [
+                "--single-branch",
+                "--branch",
+                branch_or_tag,
+            ]
+        )
+
     return run_git(
         "clone",
         repository,
@@ -46,6 +57,7 @@ def clone(
         str(depth),
         *(["--recursive"] if recursive else []),
         *template_args,
+        *branch_args,
         *(args or []),
         str(to_path.expanduser().resolve()),
     )

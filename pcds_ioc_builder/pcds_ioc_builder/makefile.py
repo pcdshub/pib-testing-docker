@@ -27,6 +27,7 @@ def get_makefile_for_path(
     """
     variables = dict(variables or {})
     variables["EPICS_BASE"] = str(epics_base)
+    variables["_DEPENDENCY_CHECK_"] = "1"
     return Makefile.from_file(
         Makefile.find_makefile(path),
         keep_os_env=False,
