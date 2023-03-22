@@ -12,6 +12,7 @@ def main(
     sync: bool = False,
     stop_on_failure: bool = True,
     skip: Optional[list[str]] = None,
+    clean: bool = True,
 ) -> None:
     specs = build.Specifications.from_spec_files(paths)
     if sync:
@@ -26,6 +27,7 @@ def build_arg_parser(argparser=None) -> argparse.ArgumentParser:
     argparser.add_argument("--sync", action="store_true", help="Synchronize makefile variables first")
     argparser.add_argument("--skip", type=str, nargs="*", help="Skip these modules")
     argparser.add_argument("--continue", action="store_false", dest="stop_on_failure", help="Do not stop builds on the first failure")
+    argparser.add_argument("--no-clean", action="store_false", dest="clean", help="Do not clean up after building")
     return argparser
 
 

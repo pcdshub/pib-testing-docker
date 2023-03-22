@@ -16,7 +16,7 @@ modules:
       tag: R2.2.4-1.2
     requires:
       conda:
-        - re2c
+        - re2c=2.2
   - name: iocAdmin
     variable: IOCADMIN
     git:

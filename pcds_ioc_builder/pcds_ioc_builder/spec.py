@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pathlib
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Literal, Optional
 
 import apischema
 import yaml
@@ -12,6 +12,7 @@ import yaml
 class MakeOptions:
     args: list[str] = field(default_factory=list)
     parallel: int = 1
+    clean: bool = True
 
 
 @dataclass
@@ -31,11 +32,22 @@ class Requirements:
 
 
 @dataclass
+class Patch:
+    description: str
+    dest_file: str
+    method: Literal["replace", "patch"] = "replace"
+    mode: Optional[int] = None
+    contents: Optional[str] = None
+    patch_file: Optional[str] = None
+
+
+@dataclass
 class Module:
     name: str
     variable: str = ""
     install_path: Optional[pathlib.Path] = None
     git: Optional[GitSource] = None
+    patches: list[Patch] = field(default_factory=list)
     make: Optional[MakeOptions] = field(default_factory=MakeOptions)
     requires: Optional[Requirements] = field(default_factory=Requirements)
 

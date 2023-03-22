@@ -5,8 +5,6 @@ import subprocess
 import sys
 from typing import Optional, Union
 
-from . import util
-
 logger = logging.getLogger(__name__)
 
 
@@ -35,10 +33,10 @@ def clone(
     args: Optional[list[str]] = None,
 ) -> int:
     template_args = []
-    if insert_template:
-        git_template_path = util.MODULE_PATH / "git_template"
-        assert git_template_path.exists()
-        template_args = [f"--template={git_template_path}"]
+    # if insert_template:
+    #     git_template_path = util.MODULE_PATH / "git_template"
+    #     assert git_template_path.exists()
+    #     template_args = [f"--template={git_template_path}"]
 
     branch_args = []
     if branch_or_tag:

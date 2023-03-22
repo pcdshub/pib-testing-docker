@@ -236,10 +236,7 @@ def get_dependency_group_for_module(
 
 
 def download_module(module: Module, settings: BaseSettings, exist_ok: bool = False) -> pathlib.Path:
-    if module.install_path is not None:
-        path = module.install_path
-    else:
-        path = settings.get_path_for_module(module)
+    path = settings.get_path_for_module(module)
 
     if path.exists():
         if not path.is_dir():

@@ -5,6 +5,15 @@ modules:
     git:
       url: https://github.com/slac-epics/epics-base.git
       tag: R7.0.2-2.0.1
-      args: --recursive
+      args: --recursive --single-branch --depth 1
+    patches:
+      - description: A bit of a hack to always give RHEL7 instead of linux-x86_64
+        method: replace
+        dest_file: startup/EpicsHostArch
+        mode: 0755
+        contents:
+          #!/bin/bash
+          echo "rhel7-x86_64"
     make:
-      args: ["-j", "8"]
+      args: ["-j", "4"]
+      clean: true

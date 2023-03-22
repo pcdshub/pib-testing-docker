@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import logging
+import os
 import pathlib
 import pprint
+import textwrap
 from dataclasses import dataclass, field
 from typing import Generator, Optional, Union
 
@@ -14,7 +16,7 @@ from .makefile import get_makefile_for_path, update_related_makefiles
 from .module import (BaseSettings, MissingDependency, VersionInfo,
                      download_module, find_missing_dependencies,
                      get_build_order, get_dependency_group_for_module)
-from .spec import (Application, MakeOptions, Module, Requirements,
+from .spec import (Application, MakeOptions, Module, Patch, Requirements,
                    SpecificationFile)
 from .util import call_make
 
@@ -159,23 +161,61 @@ def create_release_site(
     return release_site
 
 
+def should_include(module: Module, only: list[str], skip: list[str]) -> bool:
+    if only and module.variable not in only and module.name not in only:
+        return False
+
+    if module.variable in skip or module.name in skip:
+        return False
+
+    return True
+
+
+def apply_patch_to_module(module: Module, settings: BaseSettings, patch: Patch):
+    logger.info("Applying patch to module %s: %s", module.name, patch.description)
+    module_path = settings.get_path_for_module(module)
+    if patch.method == "replace":
+        assert patch.contents is not None, "No contents in replace patch?"
+        file_path = module_path / patch.dest_file
+        contents = textwrap.dedent(patch.contents)
+        with open(file_path, "wt") as fp:
+            print(contents, file=fp)
+        if patch.mode is not None:
+            os.chmod(file_path, patch.mode)
+        logger.debug(
+            "File %s replaced with contents:\n----\n%s\n----\n",
+            file_path, contents,
+        )
+    else:
+        raise ValueError(f"Unsupported patch method: {patch.method}")
+
+
+def patch_module(module: Module, settings: BaseSettings):
+    for patch in module.patches:
+        apply_patch_to_module(module, settings, patch)
+
+
 def download_spec_modules(
     specs: Specifications,
     include_deps: bool = True,
     skip: Optional[list[str]] = None,
+    only: Optional[list[str]] = None,
     exist_ok: bool = True,
+    patch: bool = True,
 ) -> None:
     """
     Download modules with the versions listed in the specifications files.
     """
     skip = list(skip or [])
+    only = list(only or [])
 
     for module in specs.modules:
-        if module.variable in skip or module.name in skip:
+        if not should_include(module, only, skip):
             logger.debug("Skipping module: %s", module.name)
-            continue
 
         download_module(module, specs.settings, exist_ok=exist_ok)
+        if patch and module.patches:
+            patch_module(module, specs.settings)
 
     if not include_deps:
         return
@@ -228,7 +268,13 @@ def sync(specs: Specifications, skip: Optional[list[str]] = None):
         sync_path(specs, app_spec_path.parent)
 
 
-def build(specs: Specifications, stop_on_failure: bool = True, skip: Optional[list[str]] = None):
+def build(
+    specs: Specifications,
+    stop_on_failure: bool = True,
+    only: Optional[list[str]] = None,
+    skip: Optional[list[str]] = None,
+    clean: bool = True,
+):
     skip = list(skip or [])
     specs.check_settings()
 
@@ -242,6 +288,16 @@ def build(specs: Specifications, stop_on_failure: bool = True, skip: Optional[li
     for variable in order:
         dep = variable_to_dep[variable]
         if variable in skip or dep.name in skip:
+            logger.debug(
+                "Skipping dependency as it's in the skip list: %s",
+                variable,
+            )
+            continue
+        if only and variable not in only and dep.name not in only:
+            logger.debug(
+                "Skipping dependency as it's not in the 'only' list: %s",
+                variable,
+            )
             continue
 
         logger.info("Building: %s from %s", variable, dep.path)
@@ -253,6 +309,9 @@ def build(specs: Specifications, stop_on_failure: bool = True, skip: Optional[li
             logger.error("Failed to build: %s", variable)
             if stop_on_failure:
                 raise RuntimeError(f"Failed to build {variable}")
+
+        if clean:
+            call_make("clean", path=dep.path)
 
     # finally, applications
     for spec_path, app in specs.applications.items():

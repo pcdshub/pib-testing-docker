@@ -28,7 +28,7 @@ initialize:
 	:
 
 build-base: initialize docker/Dockerfile.base
-	docker build --tag pcdshub/pcds-ioc-base:latest --file docker/Dockerfile.base .
+	docker build --tag pcdshub/pcds-ioc-base-rhel7:latest --file docker/Dockerfile.base .
 
 build-builder: initialize docker/Dockerfile.builder pcds_ioc_builder/*
 	docker build --tag pcdshub/pcds-ioc-builder:latest --file docker/Dockerfile.builder .
@@ -38,7 +38,7 @@ build-epics: build-builder build-base docker/Dockerfile.epics-base $(BASE_SPEC)
 	base_path=$(shell $(RUN_BUILDER) $(BUILDER_GET_BASE_PATH)); \
 			echo "EPICS base: $${base_version} installed to $${base_path}}"; \
 			docker build \
-				--tag pcdshub/pcds-epics-base:${EPICS_BASE_IMAGE_TAG} \
+				--tag pcdshub/pcds-epics-base-rhel7:${EPICS_BASE_IMAGE_TAG} \
 				--build-arg SPECS=$(SPECS) \
 				--build-arg EPICS_BASE=$${base_path} \
 				--build-arg EPICS_BASE_VERSION=$${base_version} \

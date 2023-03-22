@@ -3,35 +3,16 @@
 
 ARG EPICS_BASE_IMAGE_TAG=
 
-FROM pcdshub/pcds-epics-base:${EPICS_BASE_IMAGE_TAG}
+FROM pcdshub/pcds-epics-base-rhel7:${EPICS_BASE_IMAGE_TAG}
 
-USER root
-WORKDIR /usr/local
-
-RUN curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xvj bin/micromamba
-RUN chmod +x /usr/local/bin/micromamba
-
-USER docker
-
-COPY --chown=docker ./support/mambarc /cds/home/docker/.mambarc
-# COPY --chown=docker ./support/bin/* /usr/local/bin/
-COPY --chown=docker support/bash_profile /cds/home/docker/.bash_profile
-RUN mkdir ~/micromamba
-
-RUN micromamba shell init --shell=bash --prefix=~/micromamba
-
-SHELL ["/bin/bash", "--login", "-c"]
-
-# From this point on, micromamba will be accessible
-
-RUN micromamba install python=3.10 jq yq pip
+RUN micromamba install jq
 
 ARG MACRO_VERSION=R0.3.1
 RUN git clone --depth 1 --branch=${MACRO_VERSION} \
         https://github.com/pcdshub/ioc-template-macros \
         /reg/g/pcds/controls/macro/
 
-# TODO for development
+# TODO for development pre-install deps (TODO remove me)
 COPY --chown=docker ./pcds_ioc_builder/requirements.txt requirements.txt
 RUN python -m pip install -r requirements.txt
 
@@ -75,6 +56,7 @@ RUN pcds-ioc-builder build --sync /spec/*.yaml --skip EPICS_BASE
 COPY --chown=docker test-iocs/ioc-mfx-tfs-lens/ /ioc
 
 RUN echo "pcds-ioc-builder --log=DEBUG inspect . /spec/*.yaml --output build.yaml" >> ~/.bash_history
+RUN echo "pcds-ioc-builder --log=DEBUG build --sync /spec/*.yaml ./build.yaml --skip EPICS_BASE" >> ~/.bash_history
 WORKDIR /ioc
 RUN pcds-ioc-builder --log=DEBUG inspect . /spec/*.yaml --output build.yaml || /bin/true
 # RUN pcds-ioc-builder --log=DEBUG build --sync /spec/*.yaml ./build.yaml --skip EPICS_BASE
