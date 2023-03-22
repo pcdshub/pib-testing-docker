@@ -12,8 +12,8 @@ import click
 
 import pcds_ioc_builder
 
-from .. import build
-from ..spec import Module, Requirements
+from . import build
+from .spec import Module, Requirements
 
 DESCRIPTION = __doc__
 
