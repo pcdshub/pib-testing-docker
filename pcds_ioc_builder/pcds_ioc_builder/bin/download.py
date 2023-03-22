@@ -23,7 +23,6 @@ def main(
         skip=skip,
         only=only,
         exist_ok=True,
-        patch=patch,
     )
 
     if release_site:

@@ -23,25 +23,23 @@ WORKDIR /spec
 
 ARG SPECS=
 # TODO remove; set in previous build
-COPY --chown=docker ${SPECS}/base.yaml /spec/base.yaml
-COPY --chown=docker ${SPECS}/modules.yaml /spec/modules.yaml
+COPY --chown=docker ${SPECS}/*.yaml /spec/
 
-# RUN pcds-ioc-builder --help
-# RUN pcds-ioc-builder download base.yaml modules.yaml
-RUN echo "pcds-ioc-builder download base.yaml modules.yaml" >> ~/.bash_history
-RUN echo "pcds-ioc-builder build --sync base.yaml modules.yaml" >> ~/.bash_history
-RUN echo "micromamba install \$(pcds-ioc-builder summarize base.yaml modules.yaml --requirements | jq -r '.conda | join(\" \")')" >> ~/.bash_history
-RUN echo "cd /builder && pip install -e ." >> ~/.bash_history
+ENV IOC_SPEC_FILES="/spec/base.yaml /spec/modules.yaml"
 
-RUN pcds-ioc-builder summarize base.yaml modules.yaml
+RUN echo "pcds-ioc-builder download" >> ~/.bash_history
+RUN echo "pcds-ioc-builder build --sync" >> ~/.bash_history
+RUN echo "micromamba install \$(pcds-ioc-builder summarize --requirements | jq -r '.conda | join(\" \")')" >> ~/.bash_history
 
-RUN YUM_REQS=$(pcds-ioc-builder summarize base.yaml modules.yaml --requirements | jq -r '.yum | join(" ")') && \
+RUN pcds-ioc-builder summarize
+
+RUN YUM_REQS=$(pcds-ioc-builder summarize --requirements | jq -r '.yum | join(" ")') && \
       if [ -n "$YUM_REQS" ]; then \
         echo "Installing yum requirements: ${CONDA_REQS}"; \
         sudo yum -y install ${YUM_REQS}; \
       fi
 
-RUN CONDA_REQS=$(pcds-ioc-builder summarize base.yaml modules.yaml --requirements | jq -r '.conda | join(" ")') && \
+RUN CONDA_REQS=$(pcds-ioc-builder summarize --requirements | jq -r '.conda | join(" ")') && \
       if [ -n "$CONDA_REQS" ]; then \
         echo "Installing conda requirements: ${CONDA_REQS}"; \
         micromamba install ${CONDA_REQS}; \

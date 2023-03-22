@@ -201,7 +201,6 @@ def download_spec_modules(
     skip: Optional[list[str]] = None,
     only: Optional[list[str]] = None,
     exist_ok: bool = True,
-    patch: bool = True,
 ) -> None:
     """
     Download modules with the versions listed in the specifications files.
@@ -214,8 +213,6 @@ def download_spec_modules(
             logger.debug("Skipping module: %s", module.name)
 
         download_module(module, specs.settings, exist_ok=exist_ok)
-        if patch and module.patches:
-            patch_module(module, specs.settings)
 
     if not include_deps:
         return
