@@ -6,24 +6,48 @@ import pathlib
 import pprint
 import textwrap
 from dataclasses import dataclass, field
-from typing import Generator, Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from whatrecord.makefile import Dependency, DependencyGroup
 
-from .exceptions import (EpicsBaseMissing, EpicsBaseOnlyOnce,
-                         InvalidSpecification, TargetDirectoryAlreadyExists)
+from .exceptions import (
+    EpicsBaseMissing,
+    EpicsBaseOnlyOnce,
+    InvalidSpecification,
+    TargetDirectoryAlreadyExists,
+)
 from .makefile import get_makefile_for_path, update_related_makefiles
-from .module import (BaseSettings, MissingDependency, VersionInfo,
-                     download_module, find_missing_dependencies,
-                     get_build_order, get_dependency_group_for_module)
-from .spec import (Application, MakeOptions, Module, Patch, Requirements,
-                   SpecificationFile)
+from .module import (
+    BaseSettings,
+    MissingDependency,
+    VersionInfo,
+    download_module,
+    find_missing_dependencies,
+    get_build_order,
+    get_dependency_group_for_module,
+)
+from .spec import (
+    Application,
+    MakeOptions,
+    Module,
+    Patch,
+    Requirements,
+    SpecificationFile,
+)
 from .util import call_make
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
+    try:
+        from typing import Self
+    except ImportError:
+        from typing_extensions import Self
+
 
 logger = logging.getLogger(__name__)
 
 
-def add_requirements(reqs: Requirements, to_add: Requirements):
+def add_requirements(reqs: Requirements, to_add: Requirements) -> None:
     for req in to_add.apt:
         if req not in reqs.apt:
             reqs.apt.append(req)
@@ -39,6 +63,8 @@ def add_requirements(reqs: Requirements, to_add: Requirements):
 
 @dataclass
 class Specifications:
+    """Specifications file."""
+
     settings: BaseSettings = field(default_factory=BaseSettings)
     specs: dict[pathlib.Path, SpecificationFile] = field(default_factory=dict)
     modules: list[Module] = field(default_factory=list)
@@ -47,7 +73,10 @@ class Specifications:
     base_spec: Optional[Module] = None
 
     @classmethod
-    def from_spec_files(cls, paths: list[Union[pathlib.Path, str]]) -> Specifications:
+    def from_spec_files(
+        cls: type[Self],
+        paths: list[Union[pathlib.Path, str]],
+    ) -> Self:
         inst = cls()
         for path in paths:
             inst.add_spec(path)
@@ -57,14 +86,14 @@ class Specifications:
         if self.base_spec is None:
             raise InvalidSpecification(
                 "EPICS_BASE not found in specification file list; "
-                f"Found modules: {self.variable_name_to_module}"
+                f"Found modules: {self.variable_name_to_module}",
             )
 
         if not self.settings.epics_base.exists():
             raise EpicsBaseMissing(
                 f"epics-base required to introspect and download dependencies.  "
                 f"Path is {self.settings.epics_base} from specification file "
-                f"module 'epics-base'"
+                f"module 'epics-base'",
             )
 
     def add_spec(self, spec_filename: Union[str, pathlib.Path]) -> SpecificationFile:
@@ -76,7 +105,7 @@ class Specifications:
             if self.base_spec is not None:
                 raise EpicsBaseOnlyOnce(
                     f"epics-base may only be specified once.  Found "
-                    f"second time in: {spec_filename}"
+                    f"second time in: {spec_filename}",
                 )
 
             self.settings = BaseSettings.from_base_version(base)
@@ -95,7 +124,7 @@ class Specifications:
         return spec
 
     @property
-    def all_modules(self):
+    def all_modules(self) -> Generator[Module, None, None]:
         # TODO application-level overrides? shouldn't be possible, right?
         # so raise/warn/remove extra modules that are redefined
         yield from self.modules
@@ -130,21 +159,35 @@ class Specifications:
         variable_to_dep: dict[str, Dependency] = {}
         for module in self.all_modules:
             group = get_dependency_group_for_module(module, self.settings, recurse=True)
-            for module in group.all_modules.values():
-                if module.variable_name is None:
-                    logger.warning("Unset variable name? %s", module)
+            for submodule in group.all_modules.values():
+                if submodule.variable_name is None:
+                    logger.warning("Unset variable name? %s", submodule)
                     continue
 
-                variable_to_dep[module.variable_name] = module
+                variable_to_dep[submodule.variable_name] = submodule
 
         return variable_to_dep
 
 
 def create_release_site(
     specs: Specifications,
-    extra_variables: Optional[dict[str, str]] = None
+    extra_variables: Optional[dict[str, str]] = None,
+    path: Optional[pathlib.Path] = None,
 ) -> pathlib.Path:
-    release_site = specs.settings.support / "RELEASE_SITE"
+    """
+    Create a RELEASE_SITE file.
+
+    Parameters
+    ----------
+    specs : Specifications
+    extra_variables: dict[str, str], optional
+    path: pathlib.Path, optional
+
+    Returns
+    -------
+    pathlib.Path
+    """
+    release_site = path or specs.settings.support / "RELEASE_SITE"
 
     variables = {
         "EPICS_BASE": str(specs.settings.epics_base),
@@ -154,7 +197,7 @@ def create_release_site(
     if extra_variables:
         variables.update(extra_variables)
 
-    with open(release_site, mode="wt") as fp:
+    with open(release_site, mode="w") as fp:
         for variable, value in variables.items():
             print(f"{variable}={value}", file=fp)
 
@@ -171,14 +214,15 @@ def should_include(module: Module, only: list[str], skip: list[str]) -> bool:
     return True
 
 
-def apply_patch_to_module(module: Module, settings: BaseSettings, patch: Patch):
+def apply_patch_to_module(module: Module, settings: BaseSettings, patch: Patch) -> None:
     logger.info("Applying patch to module %s: %s", module.name, patch.description)
     module_path = settings.get_path_for_module(module)
     if patch.method == "replace":
-        assert patch.contents is not None, "No contents in replace patch?"
+        if patch.contents is None:
+            raise ValueError(f"No contents in patch: {patch.description}")
         file_path = module_path / patch.dest_file
         contents = textwrap.dedent(patch.contents)
-        with open(file_path, "wt") as fp:
+        with open(file_path, "w") as fp:
             print(contents, file=fp)
         if patch.mode is not None:
             os.chmod(file_path, patch.mode)
@@ -190,21 +234,19 @@ def apply_patch_to_module(module: Module, settings: BaseSettings, patch: Patch):
         raise ValueError(f"Unsupported patch method: {patch.method}")
 
 
-def patch_module(module: Module, settings: BaseSettings):
+def patch_module(module: Module, settings: BaseSettings) -> None:
     for patch in module.patches:
         apply_patch_to_module(module, settings, patch)
 
 
 def download_spec_modules(
     specs: Specifications,
-    include_deps: bool = True,
+    # include_deps: bool = True,
     skip: Optional[list[str]] = None,
     only: Optional[list[str]] = None,
     exist_ok: bool = True,
 ) -> None:
-    """
-    Download modules with the versions listed in the specifications files.
-    """
+    """Download modules with the versions listed in the specifications files."""
     skip = list(skip or [])
     only = list(only or [])
 
@@ -214,23 +256,20 @@ def download_spec_modules(
 
         download_module(module, specs.settings, exist_ok=exist_ok)
 
-    if not include_deps:
-        return
-
-    variable_to_dep = specs.get_variable_to_dependency()
-    print("Dependencies from specification files:")
-    for variable, dep in variable_to_dep.items():
-        print(f"{variable}: {dep.path}")
+    # variable_to_dep = specs.get_variable_to_dependency()
+    # print("Dependencies from specification files:")
+    # for variable, dep in variable_to_dep.items():
+    #     print(f"{variable}: {dep.path}")
 
 
-def sync_module(specs: Specifications, module: Module):
+def sync_module(specs: Specifications, module: Module) -> None:
     group = get_dependency_group_for_module(module, specs.settings, recurse=True)
     dep = group.all_modules[group.root]
     logger.info("Updating makefiles in %s", group.root)
     update_related_makefiles(group.root, dep.makefile, variable_to_value=specs.variables_to_sync)
 
 
-def sync_path(specs: Specifications, path: pathlib.Path, extras: Optional[dict[str, str]] = None):
+def sync_path(specs: Specifications, path: pathlib.Path, extras: Optional[dict[str, str]] = None) -> None:
     makefile = get_makefile_for_path(path, epics_base=specs.settings.epics_base)
     # TODO introspection at 2 levels? 'modules' may be the wrong abstraction?
     # or is (base / modules between / app) not too many layers?
@@ -247,7 +286,7 @@ def sync_path(specs: Specifications, path: pathlib.Path, extras: Optional[dict[s
     update_related_makefiles(path, makefile, variable_to_value=variables)
 
 
-def sync(specs: Specifications, skip: Optional[list[str]] = None):
+def sync(specs: Specifications, skip: Optional[list[str]] = None) -> None:
     skip = list(skip or [])
 
     logger.debug(
@@ -267,11 +306,12 @@ def sync(specs: Specifications, skip: Optional[list[str]] = None):
 
 def build(
     specs: Specifications,
+    *,
     stop_on_failure: bool = True,
     only: Optional[list[str]] = None,
     skip: Optional[list[str]] = None,
-    clean: bool = True,
-):
+    clean: bool = False,
+) -> None:
     skip = list(skip or [])
     specs.check_settings()
 
@@ -325,18 +365,25 @@ def build(
 @dataclass
 class RecursiveInspector:
     """
+    Recursive inspector tool.
+
     Inspector tool which can:
     1. Introspect modules/IOCs for missing dependencies
     2. Download missing dependencies
     3. Recurse to (1)
     """
+
     specs: Specifications
     new_specs: Specifications
     inspect_path: pathlib.Path
     group: DependencyGroup
 
     @classmethod
-    def from_path(cls, path: pathlib.Path, specs: Specifications):
+    def from_path(
+        cls: type[Self],
+        path: pathlib.Path,
+        specs: Specifications,
+    ) -> Self:
         path = path.expanduser().resolve()
         if path.parts[-1] == "Makefile":
             path = path.parent
@@ -345,13 +392,12 @@ class RecursiveInspector:
             specs=specs,
             inspect_path=path,
             group=DependencyGroup(root=path),
-            new_specs=Specifications(settings=specs.settings)
+            new_specs=Specifications(settings=specs.settings),
         )
         inspector.add_dependency(
             name="ioc",
             variable_name="",
             path=path,
-            build=False,
         )
         return inspector
 
@@ -369,7 +415,6 @@ class RecursiveInspector:
         variable_name: str,
         path: pathlib.Path,
         # reset_configure: bool = True,
-        build: bool = False,
     ) -> Dependency:
         """
         Add a dependency identified by its variable name and version tag.
@@ -450,8 +495,10 @@ class RecursiveInspector:
             for missing_dep in find_missing_dependencies(dep):
                 yield missing_dep
 
-    def download_missing_dependencies(self):
+    def download_missing_dependencies(self) -> None:
         """
+        Download missing dependencies.
+
         Using module path conventions, find all dependencies and check them
         out to the cache directory.
 
@@ -489,7 +536,7 @@ class RecursiveInspector:
                 logger.info("%s already exists on disk. Assuming it's up-to-date", module.name)
                 module_path = ex.path
 
-            self.add_dependency(module.name, module.variable, module_path, build=False)
+            self.add_dependency(module.name, module.variable, module_path)
 
     @property
     def variable_to_version(self) -> dict[str, VersionInfo]:

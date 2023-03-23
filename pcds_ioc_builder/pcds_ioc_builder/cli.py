@@ -1,6 +1,4 @@
-"""
-`pcds-ioc-builder` is the top-level command for accessing various subcommands.
-"""
+"""`pcds-ioc-builder` is the top-level command for accessing various subcommands."""
 
 import io
 import json
@@ -15,8 +13,6 @@ import apischema
 import click
 import yaml
 
-import pcds_ioc_builder
-
 from . import build
 from .spec import Application, Module, Requirements, SpecificationFile
 
@@ -27,6 +23,8 @@ logger = logging.getLogger(__name__)
 
 
 class CliContext(TypedDict):
+    """Click CLI context dictionary."""
+
     specs: build.Specifications
     exclude_modules: list[str]
     only_modules: list[str]
@@ -42,10 +40,16 @@ def get_included_modules(ctx: click.Context) -> Generator[Module, None, None]:
             logger.debug("Skipping module: %s", module.name)
 
 
-def print_version(ctx: click.Context, param: click.Parameter, value: bool):
+def print_version(
+    ctx: click.Context,
+    param: click.Parameter,  # noqa: ARG001
+    value: bool,
+) -> None:
     if not value or ctx.resilient_parsing:
         return
-    print(pcds_ioc_builder.__version__)
+
+    from . import __version__
+    print(__version__)  # noqa: T201
     ctx.exit()
 
 
@@ -84,8 +88,26 @@ def print_version(ctx: click.Context, param: click.Parameter, value: bool):
 @click.option(
     "--exclude",
     "exclude_modules",
-    help="Exclude these modules (by variable name or spec-defined name)",
+    help=(
+        "Exclude these modules when performing actions, "
+        "by variable name or spec-defined name"
+    ),
     type=str,
+    multiple=True,
+    required=False,
+)
+@click.option(
+    "--exclude-from",
+    "exclude_from",
+    help="Exclude modules from this file when performing actions",
+    type=click.Path(
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        resolve_path=True,
+        allow_dash=False,  # <-- TODO support stdin
+        path_type=pathlib.Path,
+    ),
     multiple=True,
     required=False,
 )
@@ -99,12 +121,17 @@ def print_version(ctx: click.Context, param: click.Parameter, value: bool):
 )
 def cli(
     ctx: click.Context,
+    *,
     log_level: str,
     spec_files: list[str | pathlib.Path],
     exclude_modules: list[str],
+    exclude_from: list[pathlib.Path],
     only_modules: list[str],
-):
-    logger.info(f"Main: {log_level=} {spec_files=} {exclude_modules=} {only_modules=}")
+) -> None:
+    logger.info(
+        f"Main: {log_level=} {spec_files=} {exclude_modules=} "
+        f"{only_modules=} {exclude_from=}",
+    )
     ctx.ensure_object(dict)
 
     module_logger = logging.getLogger("pcds_ioc_builder")
@@ -115,10 +142,10 @@ def cli(
 
     # NOTE: gather env vars and add them to the list
     # TODO: this is not what click would do normally; is this OK?
-    for path in reversed(
-        os.environ[f"{AUTO_ENVVAR_PREFIX}_SPEC_FILES"].split(os.pathsep)
+    for path_str in reversed(
+        os.environ[f"{AUTO_ENVVAR_PREFIX}_SPEC_FILES"].split(os.pathsep),
     ):
-        path = pathlib.Path(path).expanduser().resolve()
+        path = pathlib.Path(path_str).expanduser().resolve()
         if path not in spec_files:
             logger.debug("Adding spec file from environment: %s", path)
             spec_files.insert(0, path)
@@ -132,58 +159,80 @@ def cli(
     ctx.obj["only_modules"] = only_modules
 
 
-@cli.command("build")
+@cli.command(
+    "build",
+    help="Recursively build everything in the spec",
+)
 @click.option(
-    "--continue-on-failure/--stop-on-failure",
+    "--stop-on-failure/--continue-on-failure",
+    default=True,
     help="Stop builds on the first failure",
 )
 @click.pass_context
-def cli_build(ctx: click.Context, continue_on_failure: bool = False):
-    logger.info(f"Build: {continue_on_failure=}")
+def cli_build(ctx: click.Context, stop_on_failure: bool = False) -> None:
+    logger.info(f"Build: {stop_on_failure=}")
     info = cast(CliContext, ctx.obj)
-    print(continue_on_failure)
     return build.build(
         info["specs"],
-        stop_on_failure=not continue_on_failure,
+        stop_on_failure=stop_on_failure,
         skip=info["exclude_modules"],
     )
 
 
-@cli.command("download")
-@click.option(
-    "--include-deps/--exclude-deps",
-    default=True,
-    help="Do not download dependencies",
+@cli.command(
+    "download",
+    help="Download modules listed in the spec files, optionally ",
 )
-@click.option(
-    "--release-site/--no-release-site",
-    default=True,
-    help="Create a RELEASE_SITE file",
-)
+# @click.option(
+#     "--include-deps/--exclude-deps",
+#     default=True,
+#     help="Do not download dependencies",
+# )
 @click.pass_context
 def cli_download(
     ctx: click.Context,
-    include_deps: bool,
-    release_site: bool,
-):
-    logger.info(f"Download: {include_deps=} {release_site=}")
+    # include_deps: bool,
+    # release_site: bool,
+) -> None:
+    logger.info("Download")
     info = cast(CliContext, ctx.obj)
 
     build.download_spec_modules(
         info["specs"],
-        include_deps=include_deps,
+        # include_deps=include_deps,
         skip=info["exclude_modules"],
         only=info["only_modules"],
         exist_ok=True,
     )
 
-    if release_site:
-        build.create_release_site(info["specs"])
 
-
-@cli.command("patch")
+@cli.command(
+    "release_site",
+    help="Create a RELEASE_SITE file.",
+)
+@click.option(
+    "--output",
+    help="Path to write release_site file to",
+    type=click.Path(
+        dir_okay=False,
+        path_type=pathlib.Path,
+    ),
+    default=None,
+    required=False,
+)
 @click.pass_context
-def cli_patch(ctx: click.Context):
+def cli_release_site(ctx: click.Context, output: Optional[pathlib.Path]) -> None:
+    logger.info("RELEASE_SITE")
+    info = cast(CliContext, ctx.obj)
+    build.create_release_site(info["specs"], path=output)
+
+
+@cli.command(
+    "patch",
+    help="Apply patches from spec files",
+)
+@click.pass_context
+def cli_patch(ctx: click.Context) -> None:
     logger.info("Patch")
     info = cast(CliContext, ctx.obj)
     specs = info["specs"]
@@ -191,7 +240,10 @@ def cli_patch(ctx: click.Context):
         build.patch_module(module, specs.settings)
 
 
-@cli.command("inspect")
+@cli.command(
+    "inspect",
+    help="Introspect an IOC/module and [optionally] recursively download dependencies",
+)
 @click.argument(
     "ioc_path",
     type=click.Path(
@@ -217,6 +269,7 @@ def cli_patch(ctx: click.Context):
 )
 @click.option(
     "--download/--no-download",
+    default=True,
     help="Download missing dependencies and recursively inspect them",
 )
 @click.pass_context
@@ -228,8 +281,11 @@ def cli_inspect(
     # recurse: bool = True,
     # name: str = "",
     # variable_name: str = "",
-):
-    logger.info(f"Inspect: {ioc_path=} {output=}")
+) -> None:
+    logger.info(
+        "Inspect: ioc_path=%s output=%s download=%s",
+        ioc_path, output, download,
+    )
 
     info = cast(CliContext, ctx.obj)
     specs = info["specs"]
@@ -276,18 +332,25 @@ def cli_inspect(
         output.close()
 
 
-@cli.command("parse")
+@cli.command(
+    "parse",
+    help="Parse the spec files and output a JSON summary",
+)
 @click.pass_context
-def cli_parse(ctx: click.Context):
+def cli_parse(ctx: click.Context) -> None:
+    # TODO: remove?
     logger.info("Parse")
     info = cast(CliContext, ctx.obj)
 
     specs = info["specs"]
     serialized = apischema.serialize(build.Specifications, specs)
-    print(json.dumps(serialized, indent=2))
+    print(json.dumps(serialized, indent=2))  # noqa: T201
 
 
-@cli.command("requirements")
+@cli.command(
+    "requirements",
+    help="Summarize all requirements and list them",
+)
 @click.argument(
     "source",
     required=False,
@@ -295,22 +358,25 @@ def cli_parse(ctx: click.Context):
     default=None,
 )
 @click.pass_context
-def cli_requirements(ctx: click.Context, source: Optional[str] = None):
-    logger.info(f"Requirements: {source=}")
+def cli_requirements(ctx: click.Context, source: Optional[str] = None) -> None:
+    logger.info("Requirements: source=%s", source)
     info = cast(CliContext, ctx.obj)
     specs = info["specs"]
 
     if source is None:
         reqs = apischema.serialize(Requirements, specs.requirements)
-        print(json.dumps(reqs, indent=2))
+        print(json.dumps(reqs, indent=2))  # noqa: T201
     else:
         for req in getattr(specs.requirements, source):
-            print(req)
+            print(req)  # noqa: T201
 
 
-@cli.command("sync")
+@cli.command(
+    "sync",
+    help="Synchronize paths for all dependencies (RELEASE file variables)",
+)
 @click.pass_context
-def cli_sync(ctx: click.Context):
+def cli_sync(ctx: click.Context) -> None:
     logger.info("Sync")
     info = cast(CliContext, ctx.obj)
     specs = info["specs"]
@@ -324,7 +390,7 @@ def cli_sync(ctx: click.Context):
     build.sync(specs, skip=info["exclude_modules"])
 
 
-def main():
+def main() -> None:
     return cli(auto_envvar_prefix=AUTO_ENVVAR_PREFIX)
 
 

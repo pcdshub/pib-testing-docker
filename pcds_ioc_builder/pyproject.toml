@@ -41,3 +41,85 @@ file = [ "requirements.txt",]
 
 [tool.setuptools.dynamic.optional-dependencies.test]
 file = "dev-requirements.txt"
+
+[tool.ruff]
+exclude = []
+fixable = [
+  "I",
+]
+ignore = [
+  "ANN101",  # missing-type-self 	Missing type annotation for self in method
+  "E501",
+  "D100",    # missing docstring
+  "D102",    # missing docstring
+  "D103",    # missing docstring
+  "TRY003",  # long messages outside exception class
+  "G004",    # logging statement uses f-string
+]
+line-length = 88
+select = [
+  "F",   # Pyflakes
+  "E",   # pycodestyle Error
+  "W",   # pycodestyle Warning
+  "C90", # mccabe
+  "I",   # isort
+  "N",   # pep8-naming
+  "D",   # pydocstyle
+  "UP",  # pyupgrade
+  "YTT", # flake8-2020
+  "ANN", # flake8-annotations
+  "S",   # flake8-bandit
+  "BLE", # flake8-blind-except
+  # "FBT", # flake8-boolean-trap
+  "B",   # flake8-bugbear
+  "A",   # flake8-builtins
+  "COM", # flake8-commas
+  "C4",  # flake8-comprehensions
+  "DTZ", # flake8-datetimez
+  "T10", # flake8-debugger
+  "DJ",  # flake8-django
+  # "EM",  # flake8-errmsg   -> no f-strings in exceptions
+  "EXE", # flake8-executable
+  "ISC", # flake8-implicit-str-concat
+  "ICN", # flake8-import-conventions
+  "G",   # flake8-logging-format
+  "INP", # flake8-no-pep420
+  "PIE", # flake8-pie
+  "T20", # flake8-print
+  "PYI", # flake8-pyi
+  "PT",  # flake8-pytest-style
+  "Q",   # flake8-quotes
+  "RSE", # flake8-raise
+  "RET", # flake8-return
+  "SLF", # flake8-self
+  "SIM", # flake8-simplify
+  "TID", # flake8-tidy-imports
+  "TCH", # flake8-type-checking
+  "ARG", # flake8-unused-arguments
+  # "PTH", # flake8-use-pathlib
+  # "ERA", # eradicate - commented-out code
+  "PD",  # pandas-vet
+  "PGH", # pygrep-hooks
+  "PL",  # Pylint
+  "PLC", # Convention
+  "PLE", # Error
+  "PLR", # Refactor
+  "PLW", # Warning
+  "TRY", # tryceratops
+  "NPY", # NumPy-specific rules
+  "RUF", # Ruff-specific rules
+]
+
+# B950 not yet supported by Ruff which we use in our config
+external = ["B950"]
+target-version = "py310"
+per-file-ignores = {}
+
+[tool.ruff.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.pyupgrade]
+keep-runtime-typing = true
+
+[tool.ruff.mccabe]
+max-complexity = 10

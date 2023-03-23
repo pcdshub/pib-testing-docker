@@ -22,12 +22,9 @@ repos:
         exclude: '^(pcds_ioc_builder/conda-recipe/meta.yaml)$'
     -   id: debug-statements
 
--   repo: https://github.com/pycqa/flake8.git
-    rev: 6.0.0
-    hooks:
-    -   id: flake8
-
--   repo: https://github.com/timothycrosley/isort
-    rev: 5.12.0
-    hooks:
-    -   id: isort
+- repo: https://github.com/charliermarsh/ruff-pre-commit
+  # Ruff version.
+  rev: 'v0.0.258'
+  hooks:
+    - id: ruff
+      args: [--fix, --exit-non-zero-on-fix]
