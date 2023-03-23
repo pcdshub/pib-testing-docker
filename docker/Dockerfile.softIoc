@@ -51,8 +51,10 @@ RUN pcds-ioc-builder --exclude EPICS_BASE download patch sync build
 # COPY --chown=docker ../ads-ioc /ioc
 COPY --chown=docker test-iocs/ioc-mfx-tfs-lens/ /ioc
 
-RUN echo "pcds-ioc-builder --log=DEBUG inspect . /spec/*.yaml --output build.yaml" >> ~/.bash_history
-RUN echo "pcds-ioc-builder --log=DEBUG build --sync /spec/*.yaml ./build.yaml --skip EPICS_BASE" >> ~/.bash_history
+RUN echo "pcds-ioc-builder --log=DEBUG --exclude EPICS_BASE download patch sync build" >> ~/.bash_history
+RUN echo "pcds-ioc-builder --log=DEBUG inspect --output build.yaml ." >> ~/.bash_history
+RUN echo "pcds-ioc-builder --log=DEBUG -s build.yaml --exclude EPICS_BASE sync build" >> ~/.bash_history
+RUN echo "cd /builder && pip install -e . && cd -" >> ~/.bash_history
 WORKDIR /ioc
-RUN pcds-ioc-builder --log=DEBUG inspect . /spec/*.yaml --output build.yaml || /bin/true
-# RUN pcds-ioc-builder --log=DEBUG build --sync /spec/*.yaml ./build.yaml --skip EPICS_BASE
+RUN pcds-ioc-builder --log=DEBUG inspect --output build.yaml . || /bin/true
+# RUN pcds-ioc-builder --log=DEBUG -s build.yaml --exclude EPICS_BASE sync build

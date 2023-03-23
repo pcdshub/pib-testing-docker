@@ -5,6 +5,7 @@
 import io
 import json
 import logging
+import os
 import pathlib
 import sys
 from collections.abc import Generator
@@ -20,6 +21,7 @@ from . import build
 from .spec import Application, Module, Requirements, SpecificationFile
 
 DESCRIPTION = __doc__
+AUTO_ENVVAR_PREFIX = "BUILDER"
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +111,21 @@ def cli(
     module_logger.setLevel(log_level)
     logging.basicConfig()
 
+    spec_files = list(spec_files)
+
+    # NOTE: gather env vars and add them to the list
+    # TODO: this is not what click would do normally; is this OK?
+    for path in reversed(
+        os.environ[f"{AUTO_ENVVAR_PREFIX}_SPEC_FILES"].split(os.pathsep)
+    ):
+        path = pathlib.Path(path).expanduser().resolve()
+        if path not in spec_files:
+            logger.debug("Adding spec file from environment: %s", path)
+            spec_files.insert(0, path)
+        else:
+            logger.debug("Spec file from environment already in list: %s", path)
+
+    logger.debug("Spec file list: %s", spec_files)
     specs = build.Specifications.from_spec_files(spec_files)
     ctx.obj["specs"] = specs
     ctx.obj["exclude_modules"] = exclude_modules
@@ -175,14 +192,6 @@ def cli_patch(ctx: click.Context):
 
 
 @cli.command("inspect")
-@click.option(
-    "-o", "--output",
-    # help="Path to write to (stdout by default)",
-    type=click.File(
-        mode="wt",
-        lazy=True,
-    ),
-)
 @click.argument(
     "ioc_path",
     type=click.Path(
@@ -196,11 +205,26 @@ def cli_patch(ctx: click.Context):
     ),
     required=True,
 )
+@click.option(
+    "-o",
+    "--output",
+    # help="Path to write to (stdout by default)",
+    type=click.File(
+        mode="wt",
+        lazy=True,
+    ),
+    default=sys.stdout,
+)
+@click.option(
+    "--download/--no-download",
+    help="Download missing dependencies and recursively inspect them",
+)
 @click.pass_context
 def cli_inspect(
     ctx: click.Context,
     ioc_path: pathlib.Path,
     output: io.TextIOBase,
+    download: bool = True,
     # recurse: bool = True,
     # name: str = "",
     # variable_name: str = "",
@@ -223,7 +247,8 @@ def cli_inspect(
     )
 
     inspector = build.RecursiveInspector.from_path(ioc_path, specs)
-    inspector.download_missing_dependencies()
+    if download:
+        inspector.download_missing_dependencies()
 
     for variable, version in inspector.variable_to_version.items():
         if variable in specs.variable_name_to_module:
@@ -300,7 +325,7 @@ def cli_sync(ctx: click.Context):
 
 
 def main():
-    return cli(auto_envvar_prefix="BUILDER")
+    return cli(auto_envvar_prefix=AUTO_ENVVAR_PREFIX)
 
 
 if __name__ == "__main__":
