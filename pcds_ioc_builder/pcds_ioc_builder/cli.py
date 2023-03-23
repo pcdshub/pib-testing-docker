@@ -2,18 +2,22 @@
 `pcds-ioc-builder` is the top-level command for accessing various subcommands.
 """
 
+import io
 import json
 import logging
+import pathlib
+import sys
 from collections.abc import Generator
 from typing import Optional, TypedDict, cast
 
 import apischema
 import click
+import yaml
 
 import pcds_ioc_builder
 
 from . import build
-from .spec import Module, Requirements
+from .spec import Application, Module, Requirements, SpecificationFile
 
 DESCRIPTION = __doc__
 
@@ -62,7 +66,7 @@ def print_version(ctx: click.Context, param: click.Parameter, value: bool):
 @click.option(
     "-s",
     "--spec",
-    "spec_files",  # -> env: IOC_BUILDER_SPEC_FILES with comma delimiter
+    "spec_files",  # -> env: BUILDER_SPEC_FILES with [semi]colon delimiter
     help="Spec filenames to load",
     type=click.Path(
         exists=True,
@@ -70,6 +74,7 @@ def print_version(ctx: click.Context, param: click.Parameter, value: bool):
         readable=True,
         resolve_path=True,
         allow_dash=True,  # <-- TODO support stdin
+        path_type=pathlib.Path,
     ),
     multiple=True,
     required=True,
@@ -93,20 +98,21 @@ def print_version(ctx: click.Context, param: click.Parameter, value: bool):
 def cli(
     ctx: click.Context,
     log_level: str,
-    spec_files: list[str],
+    spec_files: list[str | pathlib.Path],
     exclude_modules: list[str],
     only_modules: list[str],
 ):
+    logger.info(f"Main: {log_level=} {spec_files=} {exclude_modules=} {only_modules=}")
     ctx.ensure_object(dict)
 
-    logger = logging.getLogger("pcds_ioc_builder")
-    logger.setLevel(log_level)
+    module_logger = logging.getLogger("pcds_ioc_builder")
+    module_logger.setLevel(log_level)
     logging.basicConfig()
 
     specs = build.Specifications.from_spec_files(spec_files)
     ctx.obj["specs"] = specs
     ctx.obj["exclude_modules"] = exclude_modules
-    ctx.obj["only_modules"] = exclude_modules
+    ctx.obj["only_modules"] = only_modules
 
 
 @cli.command("build")
@@ -116,6 +122,7 @@ def cli(
 )
 @click.pass_context
 def cli_build(ctx: click.Context, continue_on_failure: bool = False):
+    logger.info(f"Build: {continue_on_failure=}")
     info = cast(CliContext, ctx.obj)
     print(continue_on_failure)
     return build.build(
@@ -160,6 +167,7 @@ def cli_download(
 @cli.command("patch")
 @click.pass_context
 def cli_patch(ctx: click.Context):
+    logger.info("Patch")
     info = cast(CliContext, ctx.obj)
     specs = info["specs"]
     for module in get_included_modules(ctx):
@@ -167,15 +175,86 @@ def cli_patch(ctx: click.Context):
 
 
 @cli.command("inspect")
+@click.option(
+    "-o", "--output",
+    # help="Path to write to (stdout by default)",
+    type=click.File(
+        mode="wt",
+        lazy=True,
+    ),
+)
+@click.argument(
+    "ioc_path",
+    type=click.Path(
+        exists=True,
+        dir_okay=True,
+        file_okay=False,
+        readable=True,
+        resolve_path=True,
+        allow_dash=False,
+        path_type=pathlib.Path,
+    ),
+    required=True,
+)
 @click.pass_context
-def cli_inspect(ctx: click.Context):
-    cast(CliContext, ctx.obj)
-    print("inspect")
+def cli_inspect(
+    ctx: click.Context,
+    ioc_path: pathlib.Path,
+    output: io.TextIOBase,
+    # recurse: bool = True,
+    # name: str = "",
+    # variable_name: str = "",
+):
+    logger.info(f"Inspect: {ioc_path=} {output=}")
+
+    info = cast(CliContext, ctx.obj)
+    specs = info["specs"]
+    specs.check_settings()
+
+    app = Application()
+    extra_modules = []
+    specs.applications[ioc_path] = app
+
+    logger.debug("Checking for makefile in path: %s", ioc_path)
+    logger.debug(
+        "EPICS base path for introspection: %s (%s)",
+        specs.settings.epics_base,
+        specs.settings,
+    )
+
+    inspector = build.RecursiveInspector.from_path(ioc_path, specs)
+    inspector.download_missing_dependencies()
+
+    for variable, version in inspector.variable_to_version.items():
+        if variable in specs.variable_name_to_module:
+            app.standard_modules.append(variable)
+        else:
+            extra_modules.append(version.to_module(variable))
+
+    file = SpecificationFile(
+        application=app,
+        modules=extra_modules,
+    )
+    serialized = apischema.serialize(
+        SpecificationFile,
+        file,
+        exclude_defaults=True,
+        exclude_none=True,
+    )
+    result = yaml.dump(serialized, indent=2, sort_keys=False)
+
+    logger.debug("Writing to %s:\n'''\n%s\n'''", output, result)
+    output.write(result)
+
+    if output is not sys.stdout:
+        output.flush()
+        output.close()
 
 
 @cli.command("parse")
 @click.pass_context
 def cli_parse(ctx: click.Context):
+    logger.info("Parse")
     info = cast(CliContext, ctx.obj)
 
     specs = info["specs"]
@@ -192,6 +271,7 @@ def cli_parse(ctx: click.Context):
 )
 @click.pass_context
 def cli_requirements(ctx: click.Context, source: Optional[str] = None):
+    logger.info(f"Requirements: {source=}")
     info = cast(CliContext, ctx.obj)
     specs = info["specs"]
 
@@ -206,6 +286,7 @@ def cli_requirements(ctx: click.Context, source: Optional[str] = None):
 @cli.command("sync")
 @click.pass_context
 def cli_sync(ctx: click.Context):
+    logger.info("Sync")
     info = cast(CliContext, ctx.obj)
     specs = info["specs"]
 
@@ -219,7 +300,7 @@ def cli_sync(ctx: click.Context):
 
 
 def main():
-    return cli(auto_envvar_prefix="IOC_BUILDER")
+    return cli(auto_envvar_prefix="BUILDER")
 
 
 if __name__ == "__main__":

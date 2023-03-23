@@ -31,7 +31,7 @@ name = "SLAC National Accelerator Laboratory"
 file = "LICENSE"
 
 [project.scripts]
-"pcds-ioc-builder" = "pcds_ioc_builder.bin.main:main"
+"pcds-ioc-builder" = "pcds_ioc_builder.cli:main"
 
 [tool.setuptools.dynamic.readme]
 file = "README.rst"

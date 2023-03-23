@@ -47,7 +47,7 @@ class Specifications:
     base_spec: Optional[Module] = None
 
     @classmethod
-    def from_spec_files(cls, paths: list[str]) -> Specifications:
+    def from_spec_files(cls, paths: list[Union[pathlib.Path, str]]) -> Specifications:
         inst = cls()
         for path in paths:
             inst.add_spec(path)
