@@ -5,7 +5,7 @@ import pathlib
 import re
 import shlex
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, ClassVar, Optional, Self
+from typing import TYPE_CHECKING, ClassVar, Optional
 
 from whatrecord.makefile import Dependency, DependencyGroup, Makefile
 
@@ -16,6 +16,10 @@ from .spec import GitSource, Module
 
 if TYPE_CHECKING:
     from collections.abc import Generator
+    try:
+        from typing import Self
+    except ImportError:
+        from typing_extensions import Self
 
 logger = logging.getLogger(__name__)
 

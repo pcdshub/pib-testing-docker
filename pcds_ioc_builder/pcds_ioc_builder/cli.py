@@ -1,12 +1,13 @@
 """`pcds-ioc-builder` is the top-level command for accessing various subcommands."""
 
-import io
+from __future__ import annotations
+
 import json
 import logging
 import os
 import pathlib
 import sys
-from collections.abc import Generator
+import typing
 from typing import Optional, TypedDict, cast
 
 import apischema
@@ -15,6 +16,10 @@ import yaml
 
 from . import build
 from .spec import Application, Module, Requirements, SpecificationFile
+
+if typing.TYPE_CHECKING:
+    import io
+    from collections.abc import Generator
 
 DESCRIPTION = __doc__
 AUTO_ENVVAR_PREFIX = "BUILDER"
@@ -142,15 +147,17 @@ def cli(
 
     # NOTE: gather env vars and add them to the list
     # TODO: this is not what click would do normally; is this OK?
-    for path_str in reversed(
-        os.environ[f"{AUTO_ENVVAR_PREFIX}_SPEC_FILES"].split(os.pathsep),
-    ):
-        path = pathlib.Path(path_str).expanduser().resolve()
-        if path not in spec_files:
-            logger.debug("Adding spec file from environment: %s", path)
-            spec_files.insert(0, path)
-        else:
-            logger.debug("Spec file from environment already in list: %s", path)
+    env_paths = os.environ.get(f"{AUTO_ENVVAR_PREFIX}_SPEC_FILES", "")
+    if env_paths:
+        for path_str in reversed(
+            env_paths.split(os.pathsep),
+        ):
+            path = pathlib.Path(path_str).expanduser().resolve()
+            if path not in spec_files:
+                logger.debug("Adding spec file from environment: %s", path)
+                spec_files.insert(0, path)
+            else:
+                logger.debug("Spec file from environment already in list: %s", path)
 
     logger.debug("Spec file list: %s", spec_files)
     specs = build.Specifications.from_spec_files(spec_files)

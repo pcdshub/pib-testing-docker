@@ -11,10 +11,10 @@ from typing import TYPE_CHECKING, Optional, Union
 from whatrecord.makefile import Dependency, DependencyGroup
 
 from .exceptions import (
-    EpicsBaseMissing,
-    EpicsBaseOnlyOnce,
-    InvalidSpecification,
-    TargetDirectoryAlreadyExists,
+    EpicsBaseMissingError,
+    EpicsBaseOnlyOnceError,
+    InvalidSpecificationError,
+    TargetDirectoryAlreadyExistsError,
 )
 from .makefile import get_makefile_for_path, update_related_makefiles
 from .module import (
@@ -84,13 +84,13 @@ class Specifications:
 
     def check_settings(self) -> None:
         if self.base_spec is None:
-            raise InvalidSpecification(
+            raise InvalidSpecificationError(
                 "EPICS_BASE not found in specification file list; "
                 f"Found modules: {self.variable_name_to_module}",
             )
 
         if not self.settings.epics_base.exists():
-            raise EpicsBaseMissing(
+            raise EpicsBaseMissingError(
                 f"epics-base required to introspect and download dependencies.  "
                 f"Path is {self.settings.epics_base} from specification file "
                 f"module 'epics-base'",
@@ -103,7 +103,7 @@ class Specifications:
         base = spec.modules_by_name.get("epics-base", None)
         if base is not None:
             if self.base_spec is not None:
-                raise EpicsBaseOnlyOnce(
+                raise EpicsBaseOnlyOnceError(
                     f"epics-base may only be specified once.  Found "
                     f"second time in: {spec_filename}",
                 )
@@ -532,7 +532,7 @@ class RecursiveInspector:
 
             try:
                 module_path = download_module(module, self.specs.settings)
-            except TargetDirectoryAlreadyExists as ex:
+            except TargetDirectoryAlreadyExistsError as ex:
                 logger.info("%s already exists on disk. Assuming it's up-to-date", module.name)
                 module_path = ex.path
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pathlib  # noqa: TCH003
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal, Optional
 
@@ -7,7 +8,6 @@ import apischema
 import yaml
 
 if TYPE_CHECKING:
-    import pathlib
     try:
         from typing import Self
     except ImportError:
