@@ -18,9 +18,9 @@ def call_make(
     parallel: int = 1,
     silent: bool = False,
     is_make3: bool = False,
-    **popen_kwargs
+    **popen_kwargs,  # noqa: ANN003
 ) -> int:
-    global make_timeout
+    """Run GNU make."""
     if path is None:
         path = pathlib.Path.cwd()
 
@@ -28,15 +28,15 @@ def call_make(
     if parallel <= 1:  # or is_base314:
         makeargs = []
     else:
-        makeargs = [f'-j{parallel}']
+        makeargs = [f"-j{parallel}"]
         if not is_make3:
-            makeargs += ['-Otarget']
+            makeargs += ["-Otarget"]
     if silent:
-        makeargs += ['-s']
+        makeargs += ["-s"]
     # if use_extra:
     #     makeargs += extra_makeargs
 
-    command = ['make', *makeargs, *args]
+    command = ["make", *makeargs, *args]
     logger.debug("Running '%s' in %s", shlex.join(command), path)
     sys.stdout.flush()
     sys.stderr.flush()
@@ -44,8 +44,8 @@ def call_make(
     child = subprocess.Popen(command, cwd=path, **popen_kwargs)
     timer = None
     if timeout is not None:
-        def expire(child):
-            logger.error('Timeout when running make')
+        def expire(child: subprocess.Popen) -> None:
+            logger.error("Timeout when running make")
             child.terminate()
         timer = threading.Timer(timeout, expire, args=(child,))
         timer.start()
@@ -54,9 +54,9 @@ def call_make(
     if timer is not None:
         timer.cancel()
     if code == 0:
-        logger.debug('Ran %s successfully', shlex.join(command))
+        logger.debug("Ran %s successfully", shlex.join(command))
     else:
-        logger.error('Ran %s unsuccessfully (code %d)', shlex.join(command), code)
+        logger.error("Ran %s unsuccessfully (code %d)", shlex.join(command), code)
     return code
 
 

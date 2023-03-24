@@ -1,25 +1,37 @@
 import pathlib
 
 
-class DownloadFailure(Exception):
+class DownloadFailureError(Exception):
+    """Download failure."""
+
     ...
 
 
 class SpecificationError(Exception):
+    """Specification file error."""
+
     ...
 
 
-class TargetDirectoryAlreadyExists(RuntimeError):
+class TargetDirectoryAlreadyExistsError(RuntimeError):
+    """Target directory already exists."""
+
     path: pathlib.Path
 
 
-class InvalidSpecification(SpecificationError):
+class InvalidSpecificationError(SpecificationError):
+    """Invalid specification."""
+
     ...
 
 
-class EpicsBaseOnlyOnce(SpecificationError):
+class EpicsBaseOnlyOnceError(SpecificationError):
+    """epics-base specified multiple times."""
+
     ...
 
 
-class EpicsBaseMissing(Exception):
+class EpicsBaseMissingError(Exception):
+    """epics-base missing from specification."""
+
     ...

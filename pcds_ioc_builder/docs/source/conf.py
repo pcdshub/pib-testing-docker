@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-#
 # Configuration file for the Sphinx documentation builder.
 #
 # This file does only contain a selection of the most common options. For a
@@ -16,7 +14,7 @@ import pathlib
 import sys
 from datetime import datetime
 
-import sphinx_rtd_theme  # noqa: F401
+import sphinx_rtd_theme
 
 module_path = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(module_path))
@@ -26,8 +24,8 @@ sys.path.insert(0, str(module_path))
 project = "pcds-ioc-builder"
 author = "SLAC National Accelerator Laboratory"
 
-year = datetime.now().year
-copyright = f"{year}, {author}"
+year = datetime.now().year  # noqa: DTZ005
+copyright = f"{year}, {author}"  # noqa: A001
 
 # The short X.Y version
 version = ""
@@ -92,7 +90,7 @@ exclude_patterns = []
 # The reST default role (used for this markup: `text`) to use for all
 # documents.
 #
-default_role = 'any'
+default_role = "any"
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = "sphinx"
@@ -178,7 +176,7 @@ man_pages = [
         "pcds-ioc-builder Documentation",
         [author],
         1,
-    )
+    ),
 ]
 
 
@@ -203,15 +201,15 @@ texinfo_documents = [
 
 # Intersphinx
 intersphinx_mapping = {
-    'python': ('https://docs.python.org/3', None),
+    "python": ("https://docs.python.org/3", None),
 }
 
 
 # Inheritance diagram settings
-inheritance_graph_attrs = dict(
-    rankdir="TB",
-    size='""',
-)
+inheritance_graph_attrs = {
+    "rankdir": "TB",
+    "size": '""',
+}
 
 inheritance_alias = {
 }

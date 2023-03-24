@@ -75,16 +75,16 @@ def patch_makefile(
 
         return line
 
-    with open(makefile, "rt") as fp:
+    with open(makefile) as fp:
         lines = fp.read().splitlines()
 
     output_lines = [fix_line(line) for line in lines]
     if updated:
         logger.info(
-            "Patched makefile %s variables: %s", makefile, ", ".join(updated)
+            "Patched makefile %s variables: %s", makefile, ", ".join(updated),
         )
         if not dry_run:
-            with open(makefile, "wt") as fp:
+            with open(makefile, "w") as fp:
                 print("\n".join(output_lines), file=fp)
     else:
         logger.debug("Makefile left unchanged: %s", makefile)
@@ -95,7 +95,7 @@ def update_related_makefiles(
     base_path: pathlib.Path,
     makefile: Makefile,
     variable_to_value: dict[str, str],
-):
+) -> list[pathlib.Path]:
     """
     Update makefiles found during the introspection step that exist in ``base_path``.
 
@@ -110,6 +110,7 @@ def update_related_makefiles(
     """
     makefiles = set(makefile.makefile_list)
 
+    patched = []
     # TODO: introspection of some makefiles can error out due to $(error dep not found)
     # which means we can't check the makefiles to update, which means it's
     # entirely broken...
@@ -135,6 +136,10 @@ def update_related_makefiles(
         try:
             patch_makefile(makefile_path, variable_to_value)
         except PermissionError:
-            logger.error("Failed to patch makefile due to permissions: %s", makefile_path)
+            logger.error("Failed to patch makefile due to permissions: %s", makefile_path)  # noqa: TRY400
         except Exception:
             logger.exception("Failed to patch makefile: %s", makefile_path)
+        else:
+            patched.append(makefile_path)
+
+    return patched

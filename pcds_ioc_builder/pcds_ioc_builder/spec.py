@@ -1,15 +1,23 @@
 from __future__ import annotations
 
-import pathlib
 from dataclasses import dataclass, field
-from typing import Literal, Optional
+from typing import TYPE_CHECKING, Literal, Optional
 
 import apischema
 import yaml
 
+if TYPE_CHECKING:
+    import pathlib
+    try:
+        from typing import Self
+    except ImportError:
+        from typing_extensions import Self
+
 
 @dataclass
 class MakeOptions:
+    """Make options."""
+
     args: list[str] = field(default_factory=list)
     parallel: int = 1
     clean: bool = True
@@ -17,6 +25,8 @@ class MakeOptions:
 
 @dataclass
 class GitSource:
+    """Git source for a module/IOC."""
+
     url: str
     tag: str
     args: Optional[str] = ""
@@ -26,6 +36,8 @@ class GitSource:
 
 @dataclass
 class Requirements:
+    """Requirements for a module/IOC."""
+
     yum: list[str] = field(default_factory=list)
     apt: list[str] = field(default_factory=list)
     conda: list[str] = field(default_factory=list)
@@ -33,6 +45,8 @@ class Requirements:
 
 @dataclass
 class Patch:
+    """Patch to apply."""
+
     description: str
     dest_file: str
     method: Literal["replace", "patch"] = "replace"
@@ -43,6 +57,8 @@ class Patch:
 
 @dataclass
 class Module:
+    """EPICS module specification."""
+
     name: str
     variable: str = ""
     install_path: Optional[pathlib.Path] = None
@@ -51,7 +67,8 @@ class Module:
     make: Optional[MakeOptions] = field(default_factory=MakeOptions)
     requires: Optional[Requirements] = field(default_factory=Requirements)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
+        """Fix up defaults, if necessary."""
         if not self.variable:
             self.variable = self.name.replace("-", "_").upper()
 
@@ -59,11 +76,13 @@ class Module:
     def version(self) -> str:
         if self.git is not None:
             return self.git.tag
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 @dataclass
 class Application:
+    """EPICS application specification."""
+
     binary: str = ""
     standard_modules: list[str] = field(default_factory=list)
     requires: Optional[Requirements] = field(default_factory=Requirements)
@@ -74,6 +93,8 @@ class Application:
 
 @dataclass
 class SpecificationFile:
+    """IOC/module .spec specification file."""
+
     modules: list[Module] = field(default_factory=list)
     application: Optional[Application] = None
 
@@ -82,9 +103,9 @@ class SpecificationFile:
         return {module.name: module for module in self.modules}
 
     @classmethod
-    def from_filename(cls, filename: pathlib.Path | str) -> SpecificationFile:
+    def from_filename(cls: type[Self], filename: pathlib.Path | str) -> Self:
         with open(filename) as fp:
             contents = fp.read()
 
-        serialized = yaml.load(contents, Loader=yaml.Loader)
+        serialized = yaml.load(contents, Loader=yaml.SafeLoader)
         return apischema.deserialize(cls, serialized)

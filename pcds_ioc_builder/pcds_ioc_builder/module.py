@@ -5,14 +5,17 @@ import pathlib
 import re
 import shlex
 from dataclasses import dataclass, field
-from typing import ClassVar, Generator, Optional
+from typing import TYPE_CHECKING, ClassVar, Optional, Self
 
 from whatrecord.makefile import Dependency, DependencyGroup, Makefile
 
 from . import git
-from .exceptions import DownloadFailure, TargetDirectoryAlreadyExists
+from .exceptions import DownloadFailureError, TargetDirectoryAlreadyExistsError
 from .makefile import get_makefile_for_path
 from .spec import GitSource, Module
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 logger = logging.getLogger(__name__)
 
@@ -23,18 +26,23 @@ EPICS_SITE_TOP = pathlib.Path("/cds/group/pcds/epics")
 
 @dataclass
 class BaseSettings:
+    """Base settings for the builder."""
+
     epics_base: pathlib.Path = field(default_factory=pathlib.Path)
     support: pathlib.Path = field(default_factory=pathlib.Path)
     extra_variables: dict[str, str] = field(default_factory=dict)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
+        """Post-init fix up directories."""
         self.epics_base = self.epics_base.expanduser().resolve()
         self.support = self.support.expanduser().resolve()
 
     @classmethod
     def from_base_version(
-        cls, base: Module, extra_variables: Optional[dict[str, str]] = None
-    ):
+        cls: type[Self],
+        base: Module,
+        extra_variables: Optional[dict[str, str]] = None,
+    ) -> Self:
         base_path = base.install_path or EPICS_SITE_TOP / "base" / base.version
         if base.install_path is not None:
             # TODO get rid of this inconsistency
@@ -60,8 +68,7 @@ class BaseSettings:
 
     def get_path_for_version_info(self, version: VersionInfo) -> pathlib.Path:
         """
-        Get the cache path for the provided dependency with version
-        information.
+        Get the cache path for the provided dependency with version information.
 
         Parameters
         ----------
@@ -94,6 +101,8 @@ class BaseSettings:
 
 @dataclass
 class VersionInfo:
+    """Version information."""
+
     name: str
     base: str
     tag: str
@@ -104,7 +113,7 @@ class VersionInfo:
             r"(?P<base>[^/]+)/"
             r"modules/"
             r"(?P<name>[^/]+)/"
-            r"(?P<tag>[^/]+)/?"
+            r"(?P<tag>[^/]+)/?",
         )
         for base_path in (
             "/cds/group/pcds/epics",
@@ -131,7 +140,7 @@ class VersionInfo:
         )
 
     @classmethod
-    def from_path(cls, path: pathlib.Path) -> Optional[VersionInfo]:
+    def from_path(cls: type[Self], path: pathlib.Path) -> Optional[Self]:
         path_str = str(path.resolve())
         # TODO some sort of configuration
         for regex in cls._module_path_regexes_:
@@ -144,6 +153,8 @@ class VersionInfo:
 
 @dataclass
 class MissingDependency:
+    """Missing dependency information."""
+
     variable: str
     path: pathlib.Path
     version: Optional[VersionInfo]
@@ -170,16 +181,16 @@ def get_build_order(
     remaining = set(variable_to_dependency) - set(build_order) - set(skip)
     last_remaining = None
     remaining_requires = {
-        dep: list(
+        dep: [
             var
             for var in variable_to_dependency[dep].dependencies
             if var != dep
-        )
+        ]
         for dep in remaining
     }
     logger.debug(
         "Trying to determine build order based on these requirements: %s",
-        remaining_requires
+        remaining_requires,
     )
     while remaining:
         for to_check_name in sorted(remaining):
@@ -200,7 +211,7 @@ def get_build_order(
                 f"{remaining}\n"
                 f"\n"
                 f"which require:\n"
-                f"{remaining_requires}"
+                f"{remaining_requires}",
             )
             for remaining_dep in remaining:
                 build_order.append(remaining_dep)
@@ -220,6 +231,7 @@ def get_makefile_for_module(module: Module, settings: BaseSettings) -> Makefile:
 def get_dependency_group_for_module(
     module: Module,
     settings: BaseSettings,
+    *,
     recurse: bool = True,
     name: Optional[str] = None,
     variable_name: Optional[str] = None,
@@ -231,7 +243,7 @@ def get_dependency_group_for_module(
         recurse=recurse,
         variable_name=variable_name or module.variable,
         name=name or module.name,
-        keep_os_env=keep_os_env
+        keep_os_env=keep_os_env,
     )
 
 
@@ -242,7 +254,7 @@ def download_module(module: Module, settings: BaseSettings, exist_ok: bool = Fal
         if not path.is_dir():
             raise RuntimeError(f"File exists where module should go: {path}")
         if not exist_ok:
-            ex = TargetDirectoryAlreadyExists(f"Directories must be empty prior to the download step: {path}")
+            ex = TargetDirectoryAlreadyExistsError(f"Directories must be empty prior to the download step: {path}")
             ex.path = path
             raise ex
 
@@ -261,8 +273,8 @@ def download_module(module: Module, settings: BaseSettings, exist_ok: bool = Fal
         recursive=module.git.recursive,
         args=shlex.split(module.git.args or ""),
     ):
-        raise DownloadFailure(
-            f"Failed to download {module.git.url}; git returned a non-zero exit code"
+        raise DownloadFailureError(
+            f"Failed to download {module.git.url}; git returned a non-zero exit code",
         )
 
     return path
@@ -270,7 +282,7 @@ def download_module(module: Module, settings: BaseSettings, exist_ok: bool = Fal
 
 def find_missing_dependencies(dep: Dependency) -> Generator[MissingDependency, None, None]:
     """
-    Using module path conventions, find all missing dependencies.
+    Find all missing dependencies using module path conventions.
 
     ``missing_paths`` is allowed to be mutated during iteration.
 
