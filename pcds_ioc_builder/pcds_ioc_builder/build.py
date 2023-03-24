@@ -338,6 +338,7 @@ def build(
     clean: bool = True,
 ) -> None:
     skip = list(skip or [])
+    only = list(only or [])
     specs.check_settings()
 
     # TODO: what is my plan here? methods on Specifications or
@@ -349,26 +350,17 @@ def build(
     logger.info("Build order defined: %s", order)
     for variable in order:
         dep = variable_to_dep[variable]
-        if variable in skip or dep.name in skip:
-            logger.debug(
-                "Skipping dependency as it's in the skip list: %s",
-                variable,
-            )
-            continue
-        if only and variable not in only and dep.name not in only:
-            logger.debug(
-                "Skipping dependency as it's not in the 'only' list: %s",
-                variable,
-            )
+        spec = specs.variable_name_to_module[variable]
+        if not should_include(spec, only, skip):
+            logger.debug("Skipping dependency: %s", variable)
             continue
 
         logger.info("Building: %s from %s", variable, dep.path)
-        spec = specs.variable_name_to_module[variable]
         logger.info("Specification file calls for: %s", spec)
         make_opts = spec.make or default_make_opts
 
         res = call_make(
-            *make_opts.args,
+            make_opts.args,
             path=dep.path,
             parallel=make_opts.parallel,
             output_fd=None,
@@ -380,7 +372,9 @@ def build(
                 raise RuntimeError(f"Failed to build {variable}")
 
         if clean:
-            call_make("clean", path=dep.path, output_fd=None)
+            res = call_make(["clean"], path=dep.path, output_fd=None)
+            if res.exit_code != 0:
+                logger.warning("Failed to clean: %s", variable)
 
     # finally, applications
     for spec_path, app in specs.applications.items():
@@ -389,7 +383,7 @@ def build(
         make_opts = app.make or default_make_opts
 
         res = call_make(
-            *make_opts.args,
+            make_opts.args,
             path=path,
             parallel=make_opts.parallel,
             output_fd=None,

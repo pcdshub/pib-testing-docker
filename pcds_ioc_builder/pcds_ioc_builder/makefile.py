@@ -49,9 +49,10 @@ def _start_timeout_thread(child: subprocess.Popen, timeout: float) -> threading.
 
 
 def call_make(
-    *args: str,
-    timeout: Optional[float] = None,
+    args: list[str],
     path: Optional[pathlib.Path] = None,
+    *,
+    timeout: Optional[float] = None,
     parallel: int = 1,
     silent: bool = False,
     is_make3: bool = False,
@@ -62,8 +63,7 @@ def call_make(
     if path is None:
         path = pathlib.Path.cwd()
 
-    # no parallel make for Base 3.14
-    if parallel <= 1:  # or is_base314:
+    if parallel <= 1:
         makeargs = []
     else:
         makeargs = [f"-j{parallel}"]
@@ -71,15 +71,10 @@ def call_make(
             makeargs += ["-Otarget"]
     if silent:
         makeargs += ["-s"]
-    # if use_extra:
-    #     makeargs += extra_makeargs
 
     command = ["make", *makeargs, *args]
     logger.debug("Running '%s' in %s", shlex.join(command), path)
     start_dt = util.dt_now()
-
-    sys.stdout.flush()
-    sys.stderr.flush()
 
     child = subprocess.Popen(
         command,
@@ -110,7 +105,7 @@ def call_make(
 
     return MakeResult(
         command=shlex.join(command),
-        arguments=makeargs,
+        arguments=makeargs + args,
         log=stdout,
         exit_code=code,
         start_dt=start_dt,
