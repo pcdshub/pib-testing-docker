@@ -74,9 +74,14 @@ class Module:
 
     @property
     def version(self) -> str:
+        """Get module version number."""
         if self.git is not None:
             return self.git.tag
         raise NotImplementedError
+
+    def __str__(self) -> str:
+        """Get module string information."""
+        return f"<Module {self.name} ({self.variable})={self.version}>"
 
 
 @dataclass

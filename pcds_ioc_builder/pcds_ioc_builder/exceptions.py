@@ -13,6 +13,12 @@ class SpecificationError(Exception):
     ...
 
 
+class EpicsModuleNotFoundError(ValueError):
+    """User-specified module name was not found."""
+
+    ...
+
+
 class TargetDirectoryAlreadyExistsError(RuntimeError):
     """Target directory already exists."""
 

@@ -15,6 +15,7 @@ import click
 import yaml
 
 from . import build
+from .exceptions import EpicsModuleNotFoundError
 from .spec import Application, Module, Requirements, SpecificationFile
 
 if typing.TYPE_CHECKING:
@@ -124,14 +125,30 @@ def print_version(
     multiple=True,
     required=False,
 )
+# @click.option(
+#     "--only-from",
+#     "only_from",
+#     help="Include modules from this file when performing actions",
+#     type=click.Path(
+#         exists=True,
+#         dir_okay=False,
+#         readable=True,
+#         resolve_path=True,
+#         allow_dash=False,  # <-- TODO support stdin
+#         path_type=pathlib.Path,
+#     ),
+#     multiple=True,
+#     required=False,
+# )
 def cli(
     ctx: click.Context,
     *,
     log_level: str,
     spec_files: list[str | pathlib.Path],
     exclude_modules: list[str],
-    exclude_from: list[pathlib.Path],
+    exclude_from: list[str | pathlib.Path],
     only_modules: list[str],
+    # only_from: list[str | pathlib.Path],
 ) -> None:
     logger.info(
         f"Main: {log_level=} {spec_files=} {exclude_modules=} "
@@ -144,6 +161,7 @@ def cli(
     logging.basicConfig()
 
     spec_files = list(spec_files)
+    exclude_modules = list(exclude_modules)
 
     # NOTE: gather env vars and add them to the list
     # TODO: this is not what click would do normally; is this OK?
@@ -161,6 +179,24 @@ def cli(
 
     logger.debug("Spec file list: %s", spec_files)
     specs = build.Specifications.from_spec_files(spec_files)
+
+    for name in exclude_modules:
+        try:
+            module = specs.find_module_by_name(name)
+        except EpicsModuleNotFoundError:
+            logger.warning("Excluded modules: %s", exclude_modules)
+        else:
+            logger.debug("Excluding module: %s", module)
+
+    exclude_from_specs = build.Specifications.from_spec_files(exclude_from)
+
+    if exclude_from_specs.modules:
+        logger.debug("Excluding modules from files: %s", exclude_from)
+        for module in exclude_from_specs.all_modules:
+            if module.name not in exclude_modules and module.variable not in exclude_modules:
+                logger.debug("Excluding module: %s", module)
+                exclude_modules.append(module.name)
+
     ctx.obj["specs"] = specs
     ctx.obj["exclude_modules"] = exclude_modules
     ctx.obj["only_modules"] = only_modules

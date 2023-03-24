@@ -13,10 +13,11 @@ from whatrecord.makefile import Dependency, DependencyGroup
 from .exceptions import (
     EpicsBaseMissingError,
     EpicsBaseOnlyOnceError,
+    EpicsModuleNotFoundError,
     InvalidSpecificationError,
     TargetDirectoryAlreadyExistsError,
 )
-from .makefile import get_makefile_for_path, update_related_makefiles
+from .makefile import call_make, get_makefile_for_path, update_related_makefiles
 from .module import (
     BaseSettings,
     MissingDependency,
@@ -34,7 +35,6 @@ from .spec import (
     Requirements,
     SpecificationFile,
 )
-from .util import call_make
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -167,6 +167,31 @@ class Specifications:
                 variable_to_dep[submodule.variable_name] = submodule
 
         return variable_to_dep
+
+    def find_module_by_name(self, name: str) -> Module:
+        """
+        Find a module by case-insensitive variable name or repository name.
+
+        Parameters
+        ----------
+        name : str
+            The variable name or repository name.
+
+        Returns
+        -------
+        Module
+
+        Raises
+        ------
+        EpicsModuleNotFoundError
+            If the module is not found.
+        """
+        for module in self.all_modules:
+            if name.lower() == module.name.lower():
+                return module
+            if name.lower() == module.variable.lower():
+                return module
+        raise EpicsModuleNotFoundError(f"Specified module not found: {name}")
 
 
 def create_release_site(
@@ -310,7 +335,7 @@ def build(
     stop_on_failure: bool = True,
     only: Optional[list[str]] = None,
     skip: Optional[list[str]] = None,
-    clean: bool = False,
+    clean: bool = True,
 ) -> None:
     skip = list(skip or [])
     specs.check_settings()
@@ -342,13 +367,20 @@ def build(
         logger.info("Specification file calls for: %s", spec)
         make_opts = spec.make or default_make_opts
 
-        if call_make(*make_opts.args, path=dep.path, parallel=make_opts.parallel) != 0:
+        res = call_make(
+            *make_opts.args,
+            path=dep.path,
+            parallel=make_opts.parallel,
+            output_fd=None,
+        )
+        if res.exit_code != 0:
+            logger.debug("Make output: %s", res.log)
             logger.error("Failed to build: %s", variable)
             if stop_on_failure:
                 raise RuntimeError(f"Failed to build {variable}")
 
         if clean:
-            call_make("clean", path=dep.path)
+            call_make("clean", path=dep.path, output_fd=None)
 
     # finally, applications
     for spec_path, app in specs.applications.items():
@@ -356,7 +388,14 @@ def build(
         logger.info("Building application in %s from %s", path, app)
         make_opts = app.make or default_make_opts
 
-        if call_make(*make_opts.args, path=path, parallel=make_opts.parallel) != 0:
+        res = call_make(
+            *make_opts.args,
+            path=path,
+            parallel=make_opts.parallel,
+            output_fd=None,
+        )
+        if res.exit_code != 0:
+            logger.debug("Make output: %s", res.log)
             logger.error("Failed to build application in %s", path)
             if stop_on_failure:
                 raise RuntimeError(f"Failed to build {path}")

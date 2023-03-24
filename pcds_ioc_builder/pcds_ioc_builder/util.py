@@ -1,63 +1,17 @@
+from __future__ import annotations
+
+import datetime
 import logging
 import pathlib
-import shlex
-import subprocess
-import sys
-import threading
-from typing import Optional
 
 MODULE_PATH = pathlib.Path(__file__).resolve().parent
+
 
 logger = logging.getLogger(__name__)
 
 
-def call_make(
-    *args: str,
-    timeout: Optional[float] = None,
-    path: Optional[pathlib.Path] = None,
-    parallel: int = 1,
-    silent: bool = False,
-    is_make3: bool = False,
-    **popen_kwargs,  # noqa: ANN003
-) -> int:
-    """Run GNU make."""
-    if path is None:
-        path = pathlib.Path.cwd()
-
-    # no parallel make for Base 3.14
-    if parallel <= 1:  # or is_base314:
-        makeargs = []
-    else:
-        makeargs = [f"-j{parallel}"]
-        if not is_make3:
-            makeargs += ["-Otarget"]
-    if silent:
-        makeargs += ["-s"]
-    # if use_extra:
-    #     makeargs += extra_makeargs
-
-    command = ["make", *makeargs, *args]
-    logger.debug("Running '%s' in %s", shlex.join(command), path)
-    sys.stdout.flush()
-    sys.stderr.flush()
-
-    child = subprocess.Popen(command, cwd=path, **popen_kwargs)
-    timer = None
-    if timeout is not None:
-        def expire(child: subprocess.Popen) -> None:
-            logger.error("Timeout when running make")
-            child.terminate()
-        timer = threading.Timer(timeout, expire, args=(child,))
-        timer.start()
-
-    code = child.wait()
-    if timer is not None:
-        timer.cancel()
-    if code == 0:
-        logger.debug("Ran %s successfully", shlex.join(command))
-    else:
-        logger.error("Ran %s unsuccessfully (code %d)", shlex.join(command), code)
-    return code
+def dt_now() -> datetime.datetime:
+    return datetime.datetime.now(datetime.timezone.utc).astimezone()
 
 
 # def apply_patch(file, **kws):

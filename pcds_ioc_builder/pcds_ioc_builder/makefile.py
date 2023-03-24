@@ -1,10 +1,120 @@
+from __future__ import annotations
+
 import logging
 import pathlib
-from typing import Any, Optional
+import shlex
+import subprocess
+import sys
+import threading
+import typing
+from dataclasses import dataclass, field
+from typing import Any, Optional, TextIO
 
 from whatrecord.makefile import Makefile
 
+from . import util
+
+if typing.TYPE_CHECKING:
+    import datetime
+
+
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class MakeResult:
+    """Result of a GNU make run."""
+
+    command: str
+    arguments: list[str]
+    log: str
+    exit_code: int
+    start_dt: datetime.datetime = field(
+        default_factory=util.dt_now,
+    )
+    finish_dt: datetime.datetime = field(
+        default_factory=util.dt_now,
+    )
+
+
+def _start_timeout_thread(child: subprocess.Popen, timeout: float) -> threading.Timer:
+
+    def expire(child: subprocess.Popen) -> None:
+        logger.error("Timeout when running make")
+        child.terminate()
+
+    timer = threading.Timer(timeout, expire, args=(child,))
+    timer.start()
+    return timer
+
+
+def call_make(
+    *args: str,
+    timeout: Optional[float] = None,
+    path: Optional[pathlib.Path] = None,
+    parallel: int = 1,
+    silent: bool = False,
+    is_make3: bool = False,
+    output_fd: Optional[TextIO] = sys.stdout,
+    **popen_kwargs,  # noqa: ANN003
+) -> MakeResult:
+    """Run GNU make."""
+    if path is None:
+        path = pathlib.Path.cwd()
+
+    # no parallel make for Base 3.14
+    if parallel <= 1:  # or is_base314:
+        makeargs = []
+    else:
+        makeargs = [f"-j{parallel}"]
+        if not is_make3:
+            makeargs += ["-Otarget"]
+    if silent:
+        makeargs += ["-s"]
+    # if use_extra:
+    #     makeargs += extra_makeargs
+
+    command = ["make", *makeargs, *args]
+    logger.debug("Running '%s' in %s", shlex.join(command), path)
+    start_dt = util.dt_now()
+
+    sys.stdout.flush()
+    sys.stderr.flush()
+
+    child = subprocess.Popen(
+        command,
+        cwd=path,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        **popen_kwargs,
+    )
+
+    timer = None
+    if timeout is not None:
+        timer = _start_timeout_thread(child, timeout)
+
+    stdout: str = child.communicate()[0]
+    code = child.wait()
+
+    if output_fd is not None:
+        print(stdout, file=output_fd)
+
+    if timer is not None:
+        timer.cancel()
+    if code == 0:
+        logger.debug("Ran %s successfully", shlex.join(command))
+    else:
+        logger.error("Ran %s unsuccessfully (code %d)", shlex.join(command), code)
+
+    return MakeResult(
+        command=shlex.join(command),
+        arguments=makeargs,
+        log=stdout,
+        exit_code=code,
+        start_dt=start_dt,
+    )
 
 
 def get_makefile_for_path(
@@ -81,7 +191,9 @@ def patch_makefile(
     output_lines = [fix_line(line) for line in lines]
     if updated:
         logger.info(
-            "Patched makefile %s variables: %s", makefile, ", ".join(updated),
+            "Patched makefile %s variables: %s",
+            makefile,
+            ", ".join(updated),
         )
         if not dry_run:
             with open(makefile, "w") as fp:
@@ -136,7 +248,10 @@ def update_related_makefiles(
         try:
             patch_makefile(makefile_path, variable_to_value)
         except PermissionError:
-            logger.error("Failed to patch makefile due to permissions: %s", makefile_path)  # noqa: TRY400
+            logger.error(  # noqa: TRY400
+                "Failed to patch makefile due to permissions: %s",
+                makefile_path,
+            )
         except Exception:
             logger.exception("Failed to patch makefile: %s", makefile_path)
         else:
