@@ -45,16 +45,17 @@ RUN CONDA_REQS=$(pcds-ioc-builder requirements conda) && \
         micromamba install ${CONDA_REQS}; \
       fi
 
-RUN pcds-ioc-builder --exclude EPICS_BASE download release_site patch sync build
+# RUN pcds-ioc-builder download release_site patch sync build
 
 # COPY --chown=docker ./softIoc /ioc
 COPY --chown=docker ../ads-ioc /ioc
 # COPY --chown=docker test-iocs/ioc-mfx-tfs-lens/ /ioc
 
-RUN echo "pcds-ioc-builder --log=DEBUG --exclude EPICS_BASE download release_site patch sync build" >> ~/.bash_history
+RUN echo "pcds-ioc-builder --log=DEBUG download release_site patch sync build" >> ~/.bash_history
 RUN echo "pcds-ioc-builder --log=DEBUG inspect --output build.yaml ." >> ~/.bash_history
 RUN echo "pcds-ioc-builder --log=DEBUG -s build.yaml --exclude EPICS_BASE sync build" >> ~/.bash_history
-RUN echo "cd /builder && pip install -e . && cd -" >> ~/.bash_history
+RUN echo "ipython --pdb \`command -v pcds-ioc-builder\` -- --log=DEBUG build" >> ~/.bash_history
+RUN echo "pip install -e /builder" >> ~/.bash_history
 WORKDIR /ioc
-RUN pcds-ioc-builder --log=DEBUG inspect --output build.yaml . || /bin/true
+# RUN pcds-ioc-builder --log=DEBUG inspect --output build.yaml . || /bin/true
 # RUN pcds-ioc-builder --log=DEBUG -s build.yaml --exclude EPICS_BASE sync build

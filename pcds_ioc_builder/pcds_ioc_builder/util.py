@@ -31,3 +31,15 @@ def dt_now() -> datetime.datetime:
 #     sys.stdout.flush()
 #     sp.check_call(['7z', 'x', '-aoa', '-bd', file], cwd=place)
 #     logger.debug('EXEC DONE')
+
+
+def normalize_path(path: pathlib.Path) -> pathlib.Path:
+    """Normalize paths to use /cds/group/pcds instead of /reg/g/pcds."""
+    last_path = None
+    while path != last_path:
+        last_path = path
+        path = path.expanduser().resolve()
+        if path.parts[:4] == ("/", "reg", "g", "pcds"):
+            path = pathlib.Path("/cds/group/pcds") / pathlib.Path(*path.parts[4:])
+
+    return path

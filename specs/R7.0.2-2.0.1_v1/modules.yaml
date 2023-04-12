@@ -4,11 +4,11 @@ modules:
     git:
       url: https://github.com/slac-epics/asyn.git
       tag: R4.39-1.0.1
-  - name: ipac
-    variable: IPAC
+  - name: autosave
+    variable: AUTOSAVE
     git:
-      url: https://github.com/slac-epics/ipac.git
-      tag: R3.0.0-1.1.4
+      url: https://github.com/slac-epics/autosave.git
+      tag: R5.10-1.1.0
   - name: seq
     variable: SNCSEQ
     git:
@@ -22,3 +22,23 @@ modules:
     git:
       url: https://github.com/slac-epics/iocAdmin.git
       tag: R3.1.16-1.3.2
+  - name: sscan
+    variable: SSCAN
+    git:
+      url: https://github.com/slac-epics/sscan.git
+      tag: R2.10.2-1.0.0
+  - name: calc
+    variable: CALC
+    git:
+      url: https://github.com/slac-epics/calc.git
+      tag: R3.7-1.0.1
+  - name: caPutLog
+    variable: CAPUTLOG
+    git:
+      url: https://github.com/slac-epics/caPutLog
+      tag: R4.0-1.0.0
+  - name: diagTimer
+    variable: DIAG_TIMER
+    git:
+      url: https://github.com/slac-epics/diagTimer.git
+      tag: R1.9.2.1

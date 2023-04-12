@@ -121,9 +121,49 @@ class VersionInfo:
         )
         for base_path in (
             "/cds/group/pcds/epics",
-            "/reg/g/pcds/epics",
-            "/reg/g/pcds/package/epics",
+            "/cds/group/pcds/package/epics",
         )
+    ] + [
+        # /reg/g/pcds/epics/modules/xyz/ver
+        re.compile(
+            r"/cds/group/pcds/epics/modules/"
+            r"(?P<name>[^/]+)/"
+            r"(?P<tag>[^/]+)/?",
+        ),
+        re.compile(
+            r"/cds/group/pcds/epics-dev/modules/"
+            r"(?P<name>[^/]+)/"
+            r"(?P<tag>[^/]+)/?",
+        ),
+        re.compile(
+            r"/cds/group/pcds/package/epics/"
+            r"(?P<base>[^/]+)/"
+            r"module/"
+            r"(?P<name>[^/]+)/"
+            r"(?P<tag>[^/]+)/?",
+        ),
+        re.compile(
+            r"/afs/slac/g/lcls/epics/"
+            r"(?P<base>[^/]+)/"
+            r"modules/"
+            r"(?P<name>[^/]+)/"
+            r"(?P<tag>[^/]+)/?",
+        ),
+        re.compile(
+            r"/afs/slac.stanford.edu/g/lcls/vol8/epics/"
+            r"(?P<base>[^/]+)/"
+            r"modules/"
+            r"(?P<name>[^/]+)/"
+            r"(?P<tag>[^/]+)/?",
+        ),
+    ]
+
+    _base_path_regexes_: ClassVar[list[re.Pattern]] = [
+        # /cds/group/pcds/epics/base/R7.0.2-2.0
+        re.compile(
+            r"/cds/group/pcds/epics/base/"
+            r"(?P<tag>[^/]+)/?",
+        ),
     ]
 
     @property
@@ -152,7 +192,30 @@ class VersionInfo:
             if match is None:
                 continue
             return cls(**match.groupdict())
+        for regex in cls._base_path_regexes_:
+            match = regex.match(path_str)
+            if match is None:
+                continue
+            group = match.groupdict()
+            return cls(name="epics-base", base=group["tag"], tag=group["tag"])
         return None
+
+    @property
+    def base_url(self) -> str:
+        try:
+            slac_tag = self.base.split("-")[1]
+            looks_like_a_branch = slac_tag.count(".") <= 1
+        except (ValueError, IndexError):
+            looks_like_a_branch = False
+
+        if looks_like_a_branch:
+            base = self.base.rstrip("0.")
+            return f"https://github.com/slac-epics/epics-base/tree/{base}.branch"
+        return f"https://github.com/slac-epics/epics-base/releases/tag/{self.base}"
+
+    @property
+    def url(self) -> str:
+        return f"https://github.com/slac-epics/{self.name}/releases/tag/{self.tag}"
 
 
 @dataclass
@@ -180,14 +243,22 @@ def get_build_order(
     """
     # TODO: order based on dependency graph could/should be done efficiently
     skip = list(skip or [])
-    build_order = list(build_first or ["EPICS_BASE"])
-    variable_to_dependency = {str(dep.variable_name): dep for dep in dependencies}
-    remaining = set(variable_to_dependency) - set(build_order) - set(skip)
+    build_order = list(build_first or ["epics-base"])
+    name_to_dependency = {dep.name: dep for dep in dependencies}
+    variable_name_to_dep = {dep.variable_name: dep for dep in dependencies}
+    remaining = set(name_to_dependency) - set(build_order) - set(skip)
     last_remaining = None
+    sub_deps = {
+        dep.name: sorted(
+            VersionInfo.from_path(subdep).name   # TODO
+            for subdep in dep.dependencies.values()
+        )
+        for dep in dependencies
+    }
     remaining_requires = {
         dep: [
-            var
-            for var in variable_to_dependency[dep].dependencies
+            variable_name_to_dep[var].name
+            for var in name_to_dependency[dep].dependencies
             if var != dep
         ]
         for dep in remaining
@@ -198,13 +269,13 @@ def get_build_order(
     )
     while remaining:
         for to_check_name in sorted(remaining):
-            dep = variable_to_dependency[to_check_name]
-            if all(subdep in build_order for subdep in dep.dependencies):
+            dep = name_to_dependency[to_check_name]
+            if all(subdep in build_order for subdep in sub_deps[dep.name]):
                 build_order.append(to_check_name)
                 remaining.remove(to_check_name)
         if last_remaining == remaining:
             remaining_requires = {
-                dep: list(variable_to_dependency[dep].dependencies)
+                dep: list(sub_deps[dep])
                 for dep in remaining
             }
             logger.warning(
@@ -217,6 +288,7 @@ def get_build_order(
                 f"which require:\n"
                 f"{remaining_requires}",
             )
+            raise
             for remaining_dep in remaining:
                 build_order.append(remaining_dep)
             break
@@ -242,13 +314,22 @@ def get_dependency_group_for_module(
     keep_os_env: bool = False,
 ) -> DependencyGroup:
     makefile = get_makefile_for_module(module, settings)
-    return DependencyGroup.from_makefile(
+    res = DependencyGroup.from_makefile(
         makefile,
         recurse=recurse,
         variable_name=variable_name or module.variable,
         name=name or module.name,
         keep_os_env=keep_os_env,
     )
+    for mod in res.all_modules.values():
+        version = VersionInfo.from_path(mod.path)
+        if version is None:
+            raise ValueError(
+                f"Dependency is not in a recognized path; version unknown. "
+                f"{mod.name}: {mod.path}",
+            )
+        mod.name = version.name
+    return res
 
 
 def download_module(module: Module, settings: BaseSettings, exist_ok: bool = False) -> pathlib.Path:

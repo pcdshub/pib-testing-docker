@@ -38,11 +38,14 @@ from .spec import (
 
 if TYPE_CHECKING:
     from collections.abc import Generator
+
     try:
         from typing import Self
     except ImportError:
         from typing_extensions import Self
 
+
+BUILD_MARKER_FILE = ".pcds_builder.built"
 
 logger = logging.getLogger(__name__)
 
@@ -139,11 +142,17 @@ class Specifications:
         }
 
     @property
+    def name_to_module(self) -> dict[str, Module]:
+        return {module.name: module for module in self.all_modules}
+
+    @property
     def variable_name_to_module(self) -> dict[str, Module]:
-        return {
-            module.variable: module
-            for module in self.all_modules
-        }
+        return {module.variable: module for module in self.all_modules}
+
+    @property
+    def variables_to_rename(self) -> dict[str, str]:
+        # TODO
+        return {}
 
     @property
     def variables_to_sync(self) -> dict[str, str]:
@@ -153,20 +162,41 @@ class Specifications:
 
         return variables
 
-    def get_variable_to_dependency(self) -> dict[str, Dependency]:
-        # TODO multiple version specification handling required
-        # allow override, etc?
-        variable_to_dep: dict[str, Dependency] = {}
+    def get_name_to_dependency(self) -> dict[str, Dependency]:
+        name_to_dep: dict[str, Dependency] = {}
         for module in self.all_modules:
-            group = get_dependency_group_for_module(module, self.settings, recurse=True)
+            # module_path = self.settings.get_path_for_module(module)
+            # module_version = VersionInfo.from_path(module_path)
+            # if module_version is None:
+            #     raise ValueError(
+            #         f"Dependency is not in a recognized path; version unknown. "
+            #         f"{module.name}: {module_path}",
+            #     )
+            group = get_dependency_group_for_module(
+                module,
+                self.settings,
+                recurse=True,
+                # name=module_version.name,
+            )
             for submodule in group.all_modules.values():
-                if submodule.variable_name is None:
-                    logger.warning("Unset variable name? %s", submodule)
-                    continue
+                name_to_dep[submodule.name] = submodule
 
-                variable_to_dep[submodule.variable_name] = submodule
+        return name_to_dep
 
-        return variable_to_dep
+    # def get_variable_to_dependency(self) -> dict[str, Dependency]:
+    #     # TODO multiple version specification handling required
+    #     # allow override, etc?
+    #     variable_to_dep: dict[str, Dependency] = {}
+    #     for module in self.all_modules:
+    #         group = get_dependency_group_for_module(module, self.settings, recurse=True)
+    #         for submodule in group.all_modules.values():
+    #             if submodule.variable_name is None:
+    #                 logger.warning("Unset variable name? %s", submodule)
+    #                 continue
+    #
+    #             variable_to_dep[submodule.variable_name] = submodule
+    #
+    #     return variable_to_dep
 
     def find_module_by_name(self, name: str) -> Module:
         """
@@ -253,7 +283,8 @@ def apply_patch_to_module(module: Module, settings: BaseSettings, patch: Patch) 
             os.chmod(file_path, patch.mode)
         logger.debug(
             "File %s replaced with contents:\n----\n%s\n----\n",
-            file_path, contents,
+            file_path,
+            contents,
         )
     else:
         raise ValueError(f"Unsupported patch method: {patch.method}")
@@ -291,10 +322,14 @@ def sync_module(specs: Specifications, module: Module) -> None:
     group = get_dependency_group_for_module(module, specs.settings, recurse=True)
     dep = group.all_modules[group.root]
     logger.info("Updating makefiles in %s", group.root)
-    update_related_makefiles(group.root, dep.makefile, variable_to_value=specs.variables_to_sync)
+    update_related_makefiles(
+        group.root, dep.makefile, variable_to_value=specs.variables_to_sync,
+    )
 
 
-def sync_path(specs: Specifications, path: pathlib.Path, extras: Optional[dict[str, str]] = None) -> None:
+def sync_path(
+    specs: Specifications, path: pathlib.Path, extras: Optional[dict[str, str]] = None,
+) -> None:
     makefile = get_makefile_for_path(path, epics_base=specs.settings.epics_base)
     # TODO introspection at 2 levels? 'modules' may be the wrong abstraction?
     # or is (base / modules between / app) not too many layers?
@@ -329,12 +364,14 @@ def sync(specs: Specifications, skip: Optional[list[str]] = None) -> None:
         sync_path(specs, app_spec_path.parent)
 
 
-def build(
+def build(  # noqa: C901 TODO
     specs: Specifications,
     *,
     stop_on_failure: bool = True,
     only: Optional[list[str]] = None,
     skip: Optional[list[str]] = None,
+    mark_as_built: bool = True,
+    rebuild: bool = False,
     clean: bool = True,
 ) -> None:
     skip = list(skip or [])
@@ -343,19 +380,34 @@ def build(
 
     # TODO: what is my plan here? methods on Specifications or
     # actions outside of it?  (-> Specifications.sync() vs build(Specifications()))
-    variable_to_dep = specs.get_variable_to_dependency()
+    name_to_dep = specs.get_name_to_dependency()
 
     default_make_opts = MakeOptions()
-    order = get_build_order(list(variable_to_dep.values()), skip=[])
+    order = get_build_order(list(name_to_dep.values()), skip=[])
     logger.info("Build order defined: %s", order)
-    for variable in order:
-        dep = variable_to_dep[variable]
-        spec = specs.variable_name_to_module[variable]
+    for dep_name in order:
+        dep = name_to_dep[dep_name]
+        spec = specs.name_to_module[dep.name]
         if not should_include(spec, only, skip):
-            logger.debug("Skipping dependency: %s", variable)
+            logger.debug("Skipping dependency: %s", dep_name)
             continue
 
-        logger.info("Building: %s from %s", variable, dep.path)
+        build_marker_file = dep.path / BUILD_MARKER_FILE
+        # External `make clean` could interrupt this mechanism; do we care?
+        # Not intended to be an interactive tool but rather used from containers,
+        # so I think the answer is no...
+        # Alternatively put it in the build artifact directory which will be
+        # automatically cleaned by the EPICS build system:
+        # build_marker_file = dep.path / "configure" / "O.Common" / BUILD_MARKER_FILE
+        if build_marker_file.exists() and not rebuild:
+            logger.info(
+                "Skipping dependency %s from %s as it has already been built",
+                dep_name,
+                dep.path,
+            )
+            continue
+
+        logger.info("Building: %s from %s", dep_name, dep.path)
         logger.info("Specification file calls for: %s", spec)
         make_opts = spec.make or default_make_opts
 
@@ -365,16 +417,21 @@ def build(
             parallel=make_opts.parallel,
             output_fd=None,
         )
-        if res.exit_code != 0:
+        if res.exit_code == 0:
+            if mark_as_built:
+                with open(build_marker_file, "w") as fp:
+                    # More build info here?
+                    print('{"built":true}', file=fp)
+        else:
             logger.debug("Make output: %s", res.log)
-            logger.error("Failed to build: %s", variable)
+            logger.error("Failed to build: %s", dep_name)
             if stop_on_failure:
-                raise RuntimeError(f"Failed to build {variable}")
+                raise RuntimeError(f"Failed to build {dep_name}")
 
         if clean:
             res = call_make(["clean"], path=dep.path, output_fd=None)
             if res.exit_code != 0:
-                logger.warning("Failed to clean: %s", variable)
+                logger.warning("Failed to clean: %s", dep_name)
 
     # finally, applications
     for spec_path, app in specs.applications.items():
@@ -410,6 +467,7 @@ class RecursiveInspector:
     new_specs: Specifications
     inspect_path: pathlib.Path
     group: DependencyGroup
+    aliased_deps: dict[str, list[str]] = field(default_factory=dict)
 
     @classmethod
     def from_path(
@@ -473,7 +531,9 @@ class RecursiveInspector:
         logger.debug("Synchronizing dependency variables")
         sync_path(self.specs, path, extras=self.new_specs.variables_to_sync)
 
-        logger.debug("Introspecting dependency makefile, adding it to the DependencyGroup")
+        logger.debug(
+            "Introspecting dependency makefile, adding it to the DependencyGroup",
+        )
         makefile = get_makefile_for_path(
             path,
             epics_base=self.specs.settings.epics_base,
@@ -498,8 +558,7 @@ class RecursiveInspector:
 
         def done() -> bool:
             return all(
-                dep.variable_name in checked
-                for dep in self.group.all_modules.values()
+                dep.variable_name in checked for dep in self.group.all_modules.values()
             )
 
         while not done():
@@ -521,8 +580,12 @@ class RecursiveInspector:
                     "    %s"
                 ),
                 dep.variable_name or "this IOC",
-                "\n    ".join(f"{var}={value}" for var, value in dep.dependencies.items()),
-                "\n    ".join(f"{var}={value}" for var, value in dep.missing_paths.items()),
+                "\n    ".join(
+                    f"{var}={value}" for var, value in dep.dependencies.items()
+                ),
+                "\n    ".join(
+                    f"{var}={value}" for var, value in dep.missing_paths.items()
+                ),
             )
 
             for missing_dep in find_missing_dependencies(dep):
@@ -547,8 +610,14 @@ class RecursiveInspector:
                 "\nMissing paths: \n"
                 "    %s"
             ),
-            "\n    ".join(f"{var}={value}" for var, value in self.target_dependency.dependencies.items()),
-            "\n    ".join(f"{var}={value}" for var, value in self.target_dependency.missing_paths.items()),
+            "\n    ".join(
+                f"{var}={value}"
+                for var, value in self.target_dependency.dependencies.items()
+            ),
+            "\n    ".join(
+                f"{var}={value}"
+                for var, value in self.target_dependency.missing_paths.items()
+            ),
         )
         self.specs.check_settings()
 
@@ -566,7 +635,9 @@ class RecursiveInspector:
             try:
                 module_path = download_module(module, self.specs.settings)
             except TargetDirectoryAlreadyExistsError as ex:
-                logger.info("%s already exists on disk. Assuming it's up-to-date", module.name)
+                logger.info(
+                    "%s already exists on disk. Assuming it's up-to-date", module.name,
+                )
                 module_path = ex.path
 
             self.add_dependency(module.name, module.variable, module_path)
