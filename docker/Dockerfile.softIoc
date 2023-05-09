@@ -3,7 +3,7 @@
 
 ARG EPICS_BASE_IMAGE_TAG=
 
-FROM pcdshub/pcds-epics-base-rhel7:${EPICS_BASE_IMAGE_TAG}
+FROM pcdshub/pcds-epics-base-rhel7:${EPICS_BASE_IMAGE_TAG} as build_stage
 
 ARG MACRO_VERSION=R0.3.1
 RUN git clone --depth 1 --branch=${MACRO_VERSION} \
@@ -13,7 +13,7 @@ RUN git clone --depth 1 --branch=${MACRO_VERSION} \
 # TODO for development pre-install deps (TODO remove me)
 COPY --chown=docker ./pib/requirements.txt requirements.txt
 RUN python -m pip install -r requirements.txt
-
+# TODO for development re-install pib so epics-base doesn't require rebuilding
 COPY --chown=docker ./pib /cds/home/docker/pib
 RUN python -m pip install ~/pib && rm -rf ~/pib
 
@@ -47,7 +47,6 @@ RUN CONDA_REQS=$(pib requirements conda) && \
 
 # COPY --chown=docker ./softIoc /ioc
 COPY --chown=docker ../ads-ioc /ioc
-# COPY --chown=docker test-iocs/ioc-mfx-tfs-lens/ /ioc
 
 RUN echo "pib --log=DEBUG download release_site patch sync build" >> ~/.bash_history
 RUN echo "pib --log=DEBUG inspect --output build.yaml ." >> ~/.bash_history

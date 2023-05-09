@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+import os
 import pathlib
 
 MODULE_PATH = pathlib.Path(__file__).resolve().parent
@@ -43,3 +44,8 @@ def normalize_path(path: pathlib.Path) -> pathlib.Path:
             path = pathlib.Path("/cds/group/pcds") / pathlib.Path(*path.parts[4:])
 
     return path
+
+
+def get_host_arch() -> str:
+    """Get the EPICS host architecture."""
+    return os.environ["EPICS_HOST_ARCH"]

@@ -42,6 +42,8 @@ class Requirements:
     apt: list[str] = field(default_factory=list)
     conda: list[str] = field(default_factory=list)
 
+    # TODO: split into build/runtime requirements?
+
 
 @dataclass
 class Patch:

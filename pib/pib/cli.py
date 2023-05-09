@@ -28,6 +28,16 @@ AUTO_ENVVAR_PREFIX = "BUILDER"
 logger = logging.getLogger(__name__)
 
 
+class ExitedWithError(Exception):
+    """CLI exited with a non-zero error code."""
+
+    code: int | str | None
+
+    def __init__(self, message: str, code: int | str | None) -> None:
+        super().__init__(message)
+        self.code = code
+
+
 class CliContext(TypedDict):
     """Click CLI context dictionary."""
 
@@ -433,8 +443,38 @@ def cli_sync(ctx: click.Context) -> None:
     build.sync(specs, skip=info["exclude_modules"])
 
 
+@cli.command(
+    "please",
+    help="Shortcut: download, release_site, patch, synchronize paths, and build all using defaults",
+)
+@click.pass_context
+def cli_please(ctx: click.Context) -> None:  # noqa: ARG001
+    logger.info("pib, please do the thing")
+    for command in (
+        "download",
+        "release_site",
+        "patch",
+        "sync",
+        "build",
+    ):
+        try:
+            run_cli_programmatically(command)
+        except ExitedWithError as ex:
+            logger.exception("Command %r failed", command)
+            sys.exit(ex.code)
+
+
+def run_cli_programmatically(*args: str) -> None:
+    try:
+        cli(list(args), auto_envvar_prefix=AUTO_ENVVAR_PREFIX)
+    except SystemExit as ex:
+        code = ex.code
+        if not isinstance(code, int) or code != 0:
+            raise ExitedWithError(f"CLI exited with error code {code}", code=code) from ex
+
+
 def main() -> None:
-    return cli(auto_envvar_prefix=AUTO_ENVVAR_PREFIX)
+    return run_cli_programmatically(*sys.argv[1:])
 
 
 if __name__ == "__main__":

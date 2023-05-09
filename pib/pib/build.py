@@ -26,6 +26,7 @@ from .module import (
     find_missing_dependencies,
     get_build_order,
     get_dependency_group_for_module,
+    guess_if_built,
 )
 from .spec import (
     Application,
@@ -44,8 +45,6 @@ if TYPE_CHECKING:
     except ImportError:
         from typing_extensions import Self
 
-
-BUILD_MARKER_FILE = ".pcds_builder.built"
 
 logger = logging.getLogger(__name__)
 
@@ -370,7 +369,6 @@ def build(  # noqa: C901 TODO
     stop_on_failure: bool = True,
     only: Optional[list[str]] = None,
     skip: Optional[list[str]] = None,
-    mark_as_built: bool = True,
     rebuild: bool = False,
     clean: bool = True,
 ) -> None:
@@ -392,14 +390,7 @@ def build(  # noqa: C901 TODO
             logger.debug("Skipping dependency: %s", dep_name)
             continue
 
-        build_marker_file = dep.path / BUILD_MARKER_FILE
-        # External `make clean` could interrupt this mechanism; do we care?
-        # Not intended to be an interactive tool but rather used from containers,
-        # so I think the answer is no...
-        # Alternatively put it in the build artifact directory which will be
-        # automatically cleaned by the EPICS build system:
-        # build_marker_file = dep.path / "configure" / "O.Common" / BUILD_MARKER_FILE
-        if build_marker_file.exists() and not rebuild:
+        if guess_if_built(dep.path) and not rebuild:
             logger.info(
                 "Skipping dependency %s from %s as it has already been built",
                 dep_name,
@@ -418,10 +409,11 @@ def build(  # noqa: C901 TODO
             output_fd=None,
         )
         if res.exit_code == 0:
-            if mark_as_built:
-                with open(build_marker_file, "w") as fp:
-                    # More build info here?
-                    print('{"built":true}', file=fp)
+            # if mark_as_built:
+            #     with open(build_marker_file, "w") as fp:
+            #         # More build info here?
+            #         print('{"built":true}', file=fp)
+            ...
         else:
             logger.debug("Make output: %s", res.log)
             logger.error("Failed to build: %s", dep_name)

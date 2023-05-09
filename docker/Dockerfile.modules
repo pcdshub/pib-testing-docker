@@ -1,0 +1,39 @@
+# syntax=docker/dockerfile:1.4
+# vi: syntax=Dockerfile
+
+ARG EPICS_BASE_IMAGE_TAG=
+
+FROM pcdshub/pcds-epics-base-rhel7:${EPICS_BASE_IMAGE_TAG}
+
+# TODO for development pre-install deps (TODO remove me)
+# - remove from here -
+WORKDIR /.pib
+COPY --chown=docker ./pib/requirements.txt requirements.txt
+RUN python -m pip install -r requirements.txt
+# TODO for development re-install pib so epics-base doesn't require rebuilding
+COPY --chown=docker ./pib ./src
+RUN python -m pip install ./src && rm -rf ~/.pib
+# - remove to here -
+
+WORKDIR /spec
+
+ARG SPECS=
+# TODO remove; set in previous build
+COPY --chown=docker ${SPECS}/*.yaml /spec/
+
+ENV BUILDER_SPEC_FILES="/spec/base.yaml:/spec/modules.yaml"
+
+RUN YUM_REQS=$(pib requirements yum) && \
+      if [ -n "$YUM_REQS" ]; then \
+        echo "Installing yum requirements: ${CONDA_REQS}"; \
+        sudo yum -y install ${YUM_REQS}; \
+      fi
+
+RUN CONDA_REQS=$(pib requirements conda) && \
+      if [ -n "$CONDA_REQS" ]; then \
+        echo "Installing conda requirements: ${CONDA_REQS}"; \
+        micromamba install ${CONDA_REQS}; \
+      fi
+
+# RUN pib download release_site patch sync build
+RUN pib please

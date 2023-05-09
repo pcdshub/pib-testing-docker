@@ -47,6 +47,7 @@ build-epics: build-builder build-base docker/Dockerfile.epics-base $(BASE_SPEC)
 
 build-modules: build-epics docker/Dockerfile.modules $(MODULE_SPEC)
 	docker build  \
+		--tag pcdshub/pcds-epics-modules-rhel7:${EPICS_BASE_IMAGE_TAG} \
 		--build-arg EPICS_BASE_IMAGE_TAG=${EPICS_BASE_IMAGE_TAG} \
 		--build-arg SPECS=$(SPECS) \
 		--file docker/Dockerfile.modules \
@@ -60,9 +61,9 @@ test:
 		--tag test \
 		--build-arg EPICS_BASE_IMAGE_TAG=${EPICS_BASE_IMAGE_TAG} \
 		--build-arg SPECS=$(SPECS) \
-		--file docker/Dockerfile.softIoc \
+		--file docker/Dockerfile.modules \
 		--progress=plain \
 		.
-	docker run --rm -v $(shell pwd)/pib:/builder -v $(shell pwd)/softIoc:/softioc -it test
+	docker run --rm -v $(shell pwd)/pib:/pib -v $(shell pwd)/softIoc:/softioc -it test
 
 .PHONY: build-builder build-modules build-base build-epics initialize run-ioc all

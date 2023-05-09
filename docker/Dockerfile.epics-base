@@ -23,4 +23,10 @@ COPY --chown=docker ../git_template /opt/pcds/git_template
 # Ref: https://git-scm.com/docs/git-init#_template_directory
 ENV GIT_TEMPLATE_DIR /opt/pcds/git_template
 
-RUN pib --spec /spec/base.yaml --only EPICS_BASE download patch build
+RUN pib --spec /spec/base.yaml --only epics-base download patch build
+
+# Add on core tools that we use at PCDS here:
+ARG MACRO_VERSION=R0.3.1
+RUN git clone --depth 1 --branch=${MACRO_VERSION} \
+        https://github.com/pcdshub/ioc-template-macros \
+        /reg/g/pcds/controls/macro/

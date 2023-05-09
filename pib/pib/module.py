@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, ClassVar, Optional
 
 from whatrecord.makefile import Dependency, DependencyGroup, Makefile
 
-from . import git
+from . import git, util
 from .exceptions import DownloadFailureError, TargetDirectoryAlreadyExistsError
 from .makefile import get_makefile_for_path
 from .spec import GitSource, Module
@@ -388,3 +388,14 @@ def find_missing_dependencies(dep: Dependency) -> Generator[MissingDependency, N
         else:
             logger.debug("Missing path matches version information: %s", version_info)
         yield missing
+
+
+def guess_if_built(path: pathlib.Path) -> bool:
+    """Guess if the module located in ``path`` has already been built."""
+    host_arch = util.get_host_arch()
+    lib_path = path / "lib" / host_arch
+    if any(len(list(lib_path.glob(ext))) > 0 for ext in ("*.so*", "*.a", "*.dylib")):
+        return True
+
+    # bin_path = path / "bin" / host_arch
+    return False
