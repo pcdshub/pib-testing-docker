@@ -13,7 +13,7 @@ jobs:
     with:
       # The workflow needs to know the package name.  This can be determined
       # automatically if the repository name is the same as the import name.
-      package-name: "pcds_ioc_builder"
+      package-name: "pib"
       # Extras that will be installed for both conda/pip:
       testing-extras: ""
       # Extras to be installed only for conda-based testing:

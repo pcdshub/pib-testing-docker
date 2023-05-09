@@ -1,4 +1,4 @@
-"""`pcds-ioc-builder` is the top-level command for accessing various subcommands."""
+"""`pib` is the top-level command for accessing various subcommands."""
 
 from __future__ import annotations
 
@@ -156,7 +156,7 @@ def cli(
     )
     ctx.ensure_object(dict)
 
-    module_logger = logging.getLogger("pcds_ioc_builder")
+    module_logger = logging.getLogger("pib")
     module_logger.setLevel(log_level)
     logging.basicConfig()
 

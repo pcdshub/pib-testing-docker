@@ -7,9 +7,9 @@ RUN apt-get -y update && \
       apt-get -y install jq && \
       apt-get clean
 
-COPY pcds_ioc_builder /usr/local/src/pcds-ioc-builder
-RUN python -m pip install /usr/local/src/pcds-ioc-builder
-RUN rm -rf /usr/local/src/pcds-ioc-builder
+COPY pib /usr/local/src/pib
+RUN python -m pip install /usr/local/src/pib
+RUN rm -rf /usr/local/src/pib
 
 WORKDIR /specs
 

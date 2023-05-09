@@ -1,5 +1,5 @@
-{% set package_name = "pcds-ioc-builder" %}
-{% set import_name = "pcds_ioc_builder" %}
+{% set package_name = "pib" %}
+{% set import_name = "pib" %}
 {% set version = load_file_regex(load_file=os.path.join(import_name, "_version.py"), regex_pattern=".*version = '(\S+)'").group(1) %}
 
 package:
@@ -21,6 +21,11 @@ requirements:
     - setuptools_scm
   run:
     - python >=3.9
+    - apischema
+    - click
+    - pyyaml
+    - whatrecord
+    - typing_extensions
 
 test:
   imports:
@@ -29,7 +34,7 @@ test:
     - pytest
 
 about:
-  home: https://github.com/pcdshub/pcds-ioc-builder
+  home: https://github.com/pcdshub/pib
   license: LicenseRef-BSD-3-Clause-SLAC
   license_family: BSD
   summary: IOC building tools

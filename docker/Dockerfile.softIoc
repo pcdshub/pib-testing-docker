@@ -5,19 +5,17 @@ ARG EPICS_BASE_IMAGE_TAG=
 
 FROM pcdshub/pcds-epics-base-rhel7:${EPICS_BASE_IMAGE_TAG}
 
-RUN micromamba install jq
-
 ARG MACRO_VERSION=R0.3.1
 RUN git clone --depth 1 --branch=${MACRO_VERSION} \
         https://github.com/pcdshub/ioc-template-macros \
         /reg/g/pcds/controls/macro/
 
 # TODO for development pre-install deps (TODO remove me)
-COPY --chown=docker ./pcds_ioc_builder/requirements.txt requirements.txt
+COPY --chown=docker ./pib/requirements.txt requirements.txt
 RUN python -m pip install -r requirements.txt
 
-COPY --chown=docker ./pcds_ioc_builder /cds/home/docker/pcds-ioc-builder
-RUN python -m pip install ~/pcds-ioc-builder && rm -rf ~/pcds-ioc-builder
+COPY --chown=docker ./pib /cds/home/docker/pib
+RUN python -m pip install ~/pib && rm -rf ~/pib
 
 WORKDIR /spec
 
@@ -27,35 +25,35 @@ COPY --chown=docker ${SPECS}/*.yaml /spec/
 
 ENV BUILDER_SPEC_FILES="/spec/base.yaml:/spec/modules.yaml"
 
-RUN echo "pcds-ioc-builder download patch sync build" >> ~/.bash_history
-RUN echo "pcds-ioc-builder build --sync" >> ~/.bash_history
-RUN echo "mamba install \$(pcds-ioc-builder requirements conda)" >> ~/.bash_history
+RUN echo "pib download patch sync build" >> ~/.bash_history
+RUN echo "pib build --sync" >> ~/.bash_history
+RUN echo "mamba install \$(pib requirements conda)" >> ~/.bash_history
 
-RUN pcds-ioc-builder requirements
+RUN pib requirements
 
-RUN YUM_REQS=$(pcds-ioc-builder requirements yum) && \
+RUN YUM_REQS=$(pib requirements yum) && \
       if [ -n "$YUM_REQS" ]; then \
         echo "Installing yum requirements: ${CONDA_REQS}"; \
         sudo yum -y install ${YUM_REQS}; \
       fi
 
-RUN CONDA_REQS=$(pcds-ioc-builder requirements conda) && \
+RUN CONDA_REQS=$(pib requirements conda) && \
       if [ -n "$CONDA_REQS" ]; then \
         echo "Installing conda requirements: ${CONDA_REQS}"; \
         micromamba install ${CONDA_REQS}; \
       fi
 
-# RUN pcds-ioc-builder download release_site patch sync build
+# RUN pib download release_site patch sync build
 
 # COPY --chown=docker ./softIoc /ioc
 COPY --chown=docker ../ads-ioc /ioc
 # COPY --chown=docker test-iocs/ioc-mfx-tfs-lens/ /ioc
 
-RUN echo "pcds-ioc-builder --log=DEBUG download release_site patch sync build" >> ~/.bash_history
-RUN echo "pcds-ioc-builder --log=DEBUG inspect --output build.yaml ." >> ~/.bash_history
-RUN echo "pcds-ioc-builder --log=DEBUG -s build.yaml --exclude EPICS_BASE sync build" >> ~/.bash_history
-RUN echo "ipython --pdb \`command -v pcds-ioc-builder\` -- --log=DEBUG build" >> ~/.bash_history
+RUN echo "pib --log=DEBUG download release_site patch sync build" >> ~/.bash_history
+RUN echo "pib --log=DEBUG inspect --output build.yaml ." >> ~/.bash_history
+RUN echo "pib --log=DEBUG -s build.yaml --exclude EPICS_BASE sync build" >> ~/.bash_history
+RUN echo "ipython --pdb \`command -v pib\` -- --log=DEBUG build" >> ~/.bash_history
 RUN echo "pip install -e /builder" >> ~/.bash_history
 WORKDIR /ioc
-# RUN pcds-ioc-builder --log=DEBUG inspect --output build.yaml . || /bin/true
-# RUN pcds-ioc-builder --log=DEBUG -s build.yaml --exclude EPICS_BASE sync build
+# RUN pib --log=DEBUG inspect --output build.yaml . || /bin/true
+# RUN pib --log=DEBUG -s build.yaml --exclude EPICS_BASE sync build

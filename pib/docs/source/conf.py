@@ -21,7 +21,7 @@ sys.path.insert(0, str(module_path))
 
 # -- Project information -----------------------------------------------------
 
-project = "pcds-ioc-builder"
+project = "pib"
 author = "SLAC National Accelerator Laboratory"
 
 year = datetime.now().year  # noqa: DTZ005
@@ -131,7 +131,7 @@ html_static_path = ["_static"]
 # -- Options for HTMLHelp output ---------------------------------------------
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = "pcds-ioc-builder_namedoc"
+htmlhelp_basename = "pib_namedoc"
 
 
 # -- Options for LaTeX output ------------------------------------------------
@@ -157,8 +157,8 @@ latex_elements = {
 latex_documents = [
     (
         master_doc,
-        "pcds-ioc-builder.tex",
-        "pcds-ioc-builder Documentation",
+        "pib.tex",
+        "pib Documentation",
         "SLAC National Accelerator Laboratory",
         "manual",
     ),
@@ -172,8 +172,8 @@ latex_documents = [
 man_pages = [
     (
         master_doc,
-        "pcds-ioc-builder",
-        "pcds-ioc-builder Documentation",
+        "pib",
+        "pib Documentation",
         [author],
         1,
     ),
@@ -188,10 +188,10 @@ man_pages = [
 texinfo_documents = [
     (
         master_doc,
-        "pcds-ioc-builder",
-        "pcds-ioc-builder Documentation",
+        "pib",
+        "pib Documentation",
         author,
-        "pcds-ioc-builder",
+        "pib",
         "One line description of project.",
         "Miscellaneous",
     ),

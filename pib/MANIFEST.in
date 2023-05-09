@@ -10,7 +10,7 @@ recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
 
 recursive-include docs *.rst conf.py Makefile make.bat
-recursive-include pcds_ioc_builder/git_template/ *
+recursive-include pib/git_template/ *
 
 # If including data files in the package, add a single file/glob:
 #

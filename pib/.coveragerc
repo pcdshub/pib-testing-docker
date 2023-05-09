@@ -1,6 +1,6 @@
 [run]
 source =
-    pcds_ioc_builder
+    pib
 [report]
 omit =
     #versioning
@@ -8,4 +8,4 @@ omit =
     *_version.py
     #tests
     *test*
-    pcds_ioc_builder/tests/*
+    pib/tests/*

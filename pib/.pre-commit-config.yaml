@@ -2,7 +2,7 @@
 # See https://pre-commit.com/hooks.html for more hooks
 exclude: |
   (?x)^(
-    pcds_ioc_builder/_version.py|
+    pib/_version.py|
   )$
 
 repos:

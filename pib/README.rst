@@ -1,12 +1,12 @@
 ===============================
-pcds-ioc-builder
+pib
 ===============================
 
-.. image:: https://img.shields.io/pypi/v/pcds-ioc-builder.svg
-        :target: https://pypi.python.org/pypi/pcds-ioc-builder
+.. image:: https://img.shields.io/pypi/v/pib.svg
+        :target: https://pypi.python.org/pypi/pib
 
 
-`Documentation <https://pcdshub.github.io/pcds-ioc-builder/>`_
+`Documentation <https://pcdshub.github.io/pib/>`_
 
 IOC building tools
 

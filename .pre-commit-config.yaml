@@ -2,7 +2,7 @@
 # See https://pre-commit.com/hooks.html for more hooks
 exclude: |
   (?x)^(
-    pcds_ioc_builder/pcds_ioc_builder/_version.py|
+    pib/pib/_version.py|
   )$
 
 repos:
@@ -19,7 +19,7 @@ repos:
     -   id: check-symlinks
     -   id: check-xml
     -   id: check-yaml
-        exclude: '^(pcds_ioc_builder/conda-recipe/meta.yaml)$'
+        exclude: '^(pib/conda-recipe/meta.yaml)$'
     -   id: debug-statements
 
 - repo: https://github.com/charliermarsh/ruff-pre-commit

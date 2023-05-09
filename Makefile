@@ -13,7 +13,7 @@ SPECS=./specs/${EPICS_BASE_IMAGE_TAG}
 BASE_SPEC=$(SPECS)/base.yaml
 MODULE_SPEC=$(SPECS)/modules.yaml
 
-RUN_BUILDER=docker run --rm -v $(shell pwd)/$(SPECS):/specs -t pcdshub/pcds-ioc-builder:latest
+RUN_BUILDER=docker run --rm -v $(shell pwd)/$(SPECS):/specs -t pcdshub/pib:latest
 BUILDER_GET_BASE_PATH=yq -r '.modules[] | select(.name="epics-base") | .install_path' base.yaml
 BUILDER_GET_BASE_VERSION=yq -r '.modules[] | select(.name="epics-base") | .git.tag' base.yaml
 
@@ -30,8 +30,8 @@ initialize:
 build-base: initialize docker/Dockerfile.base
 	docker build --tag pcdshub/pcds-ioc-base-rhel7:latest --file docker/Dockerfile.base .
 
-build-builder: initialize docker/Dockerfile.builder pcds_ioc_builder/*
-	docker build --tag pcdshub/pcds-ioc-builder:latest --file docker/Dockerfile.builder .
+build-builder: initialize docker/Dockerfile.builder pib/*
+	docker build --tag pcdshub/pib:latest --file docker/Dockerfile.builder .
 
 build-epics: build-builder build-base docker/Dockerfile.epics-base $(BASE_SPEC)
 	base_version=$(shell $(RUN_BUILDER) $(BUILDER_GET_BASE_VERSION)); \
@@ -63,6 +63,6 @@ test:
 		--file docker/Dockerfile.softIoc \
 		--progress=plain \
 		.
-	docker run --rm -v $(shell pwd)/pcds_ioc_builder:/builder -v $(shell pwd)/softIoc:/softioc -it test
+	docker run --rm -v $(shell pwd)/pib:/builder -v $(shell pwd)/softIoc:/softioc -it test
 
 .PHONY: build-builder build-modules build-base build-epics initialize run-ioc all
