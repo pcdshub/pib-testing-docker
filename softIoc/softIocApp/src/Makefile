@@ -16,7 +16,7 @@ DBD += softIoc.dbd
 softIoc_DBD += base.dbd
 
 # Include dbd files from all support applications:
-softIoc_DBD += asynRecord.dbd
+softIoc_DBD += asyn.dbd
 softIoc_DBD += iocAdmin.dbd
 softIoc_DBD += devIocStats.dbd
 
