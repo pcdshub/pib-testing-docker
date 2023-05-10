@@ -3,11 +3,11 @@
 
 FROM pcdshub/pcds-ioc-base-rhel7:latest
 
-ARG SPECS=
-ARG EPICS_BASE=
-ARG EPICS_BASE_VERSION=
+RUN sudo yum update -y && \
+    sudo yum -y groupinstall 'Development Tools' && \
+    sudo yum -y clean all
 
-ENV EPICS_BASE=${EPICS_BASE}
+ARG SPECS=
 ENV EPICS_HOST_ARCH=rhel7-x86_64
 
 COPY --chown=docker ./pib ./pib

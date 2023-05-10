@@ -12,7 +12,7 @@ COPY --chown=docker ./pib/requirements.txt requirements.txt
 RUN python -m pip install -r requirements.txt
 # TODO for development re-install pib so epics-base doesn't require rebuilding
 COPY --chown=docker ./pib ./src
-RUN python -m pip install ./src && rm -rf ~/.pib
+RUN python -m pip install ./src && rm -rf ./src
 # - remove to here -
 
 WORKDIR /spec

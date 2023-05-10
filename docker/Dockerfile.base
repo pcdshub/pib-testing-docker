@@ -5,13 +5,12 @@ FROM centos:centos7.9.2009
 
 RUN yum update -y && \
     yum -y install \
+      bzip2 \
       curl \
-      perl \
+      make \
       readline-devel \
       sudo \
     && \
-    \
-    yum -y groupinstall 'Development Tools' && \
     yum -y clean all
 
 RUN cd /usr && \
@@ -37,13 +36,14 @@ COPY --chown=docker ./support/mambarc .mambarc
 
 RUN mamba shell init --shell=bash --prefix=/opt/mamba
 RUN mamba install --root-prefix /opt/mamba --name base -y \
-    curl=8.0 \
-    git=2.40 \
-    jq=1.6 \
-    python=3.10 \
-    re2c=2.2 \
-    pip
-
+      curl=8.0 \
+      git=2.40 \
+      jq=1.6 \
+      python=3.10 \
+      re2c=2.2 \
+      perl=5.32.1 \
+      pip \
+    && mamba clean --all
 
 # TODO: explicit spec file (https://mamba.readthedocs.io/en/latest/user_guide/micromamba.html)
 # for reproducibility

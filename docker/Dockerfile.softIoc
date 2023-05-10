@@ -3,56 +3,44 @@
 
 ARG EPICS_BASE_IMAGE_TAG=
 
-FROM pcdshub/pcds-epics-base-rhel7:${EPICS_BASE_IMAGE_TAG} as build_stage
-
-ARG MACRO_VERSION=R0.3.1
-RUN git clone --depth 1 --branch=${MACRO_VERSION} \
-        https://github.com/pcdshub/ioc-template-macros \
-        /reg/g/pcds/controls/macro/
-
-# TODO for development pre-install deps (TODO remove me)
-COPY --chown=docker ./pib/requirements.txt requirements.txt
-RUN python -m pip install -r requirements.txt
-# TODO for development re-install pib so epics-base doesn't require rebuilding
-COPY --chown=docker ./pib /cds/home/docker/pib
-RUN python -m pip install ~/pib && rm -rf ~/pib
+FROM pcdshub/pcds-epics-modules-rhel7:${EPICS_BASE_IMAGE_TAG} as build_stage
 
 WORKDIR /spec
 
+# TODO for development pre-install deps (TODO remove me)
+# - remove from here -
+COPY --chown=docker ./pib ./src
+RUN python -m pip install ./src && rm -rf ./src
+# - remove to here -
+
 ARG SPECS=
 # TODO remove; set in previous build
-COPY --chown=docker ${SPECS}/*.yaml /spec/
+COPY --chown=docker ./softIoc /ioc
 
-ENV BUILDER_SPEC_FILES="/spec/base.yaml:/spec/modules.yaml"
+# RUN YUM_REQS=$(pib requirements yum) && \
+#       if [ -n "$YUM_REQS" ]; then \
+#         echo "Installing yum requirements: ${CONDA_REQS}"; \
+#         sudo yum -y install ${YUM_REQS}; \
+#       fi
+#
+# RUN CONDA_REQS=$(pib requirements conda) && \
+#       if [ -n "$CONDA_REQS" ]; then \
+#         echo "Installing conda requirements: ${CONDA_REQS}"; \
+#         micromamba install ${CONDA_REQS}; \
+#       fi
 
-RUN echo "pib download patch sync build" >> ~/.bash_history
-RUN echo "pib build --sync" >> ~/.bash_history
-RUN echo "mamba install \$(pib requirements conda)" >> ~/.bash_history
-
-RUN pib requirements
-
-RUN YUM_REQS=$(pib requirements yum) && \
-      if [ -n "$YUM_REQS" ]; then \
-        echo "Installing yum requirements: ${CONDA_REQS}"; \
-        sudo yum -y install ${YUM_REQS}; \
-      fi
-
-RUN CONDA_REQS=$(pib requirements conda) && \
-      if [ -n "$CONDA_REQS" ]; then \
-        echo "Installing conda requirements: ${CONDA_REQS}"; \
-        micromamba install ${CONDA_REQS}; \
-      fi
-
-# RUN pib download release_site patch sync build
-
-# COPY --chown=docker ./softIoc /ioc
-COPY --chown=docker ../ads-ioc /ioc
+WORKDIR /ioc
+RUN pib inspect --output build.yaml .
+RUN pib -s build.yaml sync build
 
 RUN echo "pib --log=DEBUG download release_site patch sync build" >> ~/.bash_history
 RUN echo "pib --log=DEBUG inspect --output build.yaml ." >> ~/.bash_history
 RUN echo "pib --log=DEBUG -s build.yaml --exclude EPICS_BASE sync build" >> ~/.bash_history
 RUN echo "ipython --pdb \`command -v pib\` -- --log=DEBUG build" >> ~/.bash_history
 RUN echo "pip install -e /builder" >> ~/.bash_history
-WORKDIR /ioc
 # RUN pib --log=DEBUG inspect --output build.yaml . || /bin/true
 # RUN pib --log=DEBUG -s build.yaml --exclude EPICS_BASE sync build
+
+# TODO: latest?
+FROM pcdshub/pcds-ioc-base-rhel7:latest as runtime
+COPY --from=build_stage /ioc /ioc
