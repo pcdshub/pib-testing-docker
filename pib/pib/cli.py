@@ -14,7 +14,7 @@ import apischema
 import click
 import yaml
 
-from . import build
+from . import build, exceptions
 from .exceptions import EpicsModuleNotFoundError
 from .spec import Application, Module, Requirements, SpecificationFile
 
@@ -225,11 +225,17 @@ def cli(
 def cli_build(ctx: click.Context, stop_on_failure: bool = False) -> None:
     logger.info(f"Build: {stop_on_failure=}")
     info = cast(CliContext, ctx.obj)
-    return build.build(
-        info["specs"],
-        stop_on_failure=stop_on_failure,
-        skip=info["exclude_modules"],
-    )
+    try:
+        return build.build(
+            info["specs"],
+            stop_on_failure=stop_on_failure,
+            skip=info["exclude_modules"],
+        )
+    except exceptions.ProgramExecutionError as ex:
+        logger.exception("Failed to build as command returned an error")
+        click.echo("Output:")
+        click.echo(ex.output)
+        ctx.exit(1)
 
 
 @cli.command(
@@ -474,7 +480,10 @@ def run_cli_programmatically(*args: str) -> None:
 
 
 def main() -> None:
-    return run_cli_programmatically(*sys.argv[1:])
+    try:
+        return run_cli_programmatically(*sys.argv[1:])
+    except ExitedWithError as ex:
+        sys.exit(ex.code)
 
 
 if __name__ == "__main__":

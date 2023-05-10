@@ -15,6 +15,7 @@ from .exceptions import (
     EpicsBaseOnlyOnceError,
     EpicsModuleNotFoundError,
     InvalidSpecificationError,
+    MakeError,
     TargetDirectoryAlreadyExistsError,
 )
 from .makefile import call_make, get_makefile_for_path, update_related_makefiles
@@ -418,7 +419,11 @@ def build(  # noqa: C901 TODO
             logger.debug("Make output: %s", res.log)
             logger.error("Failed to build: %s", dep_name)
             if stop_on_failure:
-                raise RuntimeError(f"Failed to build {dep_name}")
+                raise MakeError(
+                    f"Failed to build {dep_name}",
+                    exit_code=res.exit_code,
+                    output=res.log,
+                )
 
         if clean:
             res = call_make(["clean"], path=dep.path, output_fd=None)
@@ -441,7 +446,11 @@ def build(  # noqa: C901 TODO
             logger.debug("Make output: %s", res.log)
             logger.error("Failed to build application in %s", path)
             if stop_on_failure:
-                raise RuntimeError(f"Failed to build {path}")
+                raise MakeError(
+                    f"Failed to build {path}",
+                    exit_code=res.exit_code,
+                    output=res.log,
+                )
 
 
 @dataclass
