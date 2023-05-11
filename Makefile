@@ -38,7 +38,7 @@ build-epics: build-base docker/Dockerfile.epics-base $(BASE_SPEC)
 		--file docker/Dockerfile.epics-base \
 		.
 
-build-modules: build-epics docker/Dockerfile.modules $(MODULE_SPEC)
+build-modules: # build-epics docker/Dockerfile.modules $(MODULE_SPEC)
 	docker build  \
 		--tag pcdshub/pcds-epics-modules-rhel7:${EPICS_BASE_IMAGE_TAG} \
 		--build-arg EPICS_BASE_IMAGE_TAG=${EPICS_BASE_IMAGE_TAG} \
@@ -61,7 +61,7 @@ test:
 	docker build  \
 		--tag pcdshub/pcds-epics-softioc-rhel7:${EPICS_BASE_IMAGE_TAG} \
 		--build-arg EPICS_BASE_IMAGE_TAG=${EPICS_BASE_IMAGE_TAG} \
-		--build-arg SPECS=$(SPECS) \
+		--build-arg SPECS=${SPECS} \
 		--file docker/Dockerfile.softIoc \
 		--progress=plain \
 		.

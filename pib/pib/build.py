@@ -72,7 +72,8 @@ class Specifications:
     specs: dict[pathlib.Path, SpecificationFile] = field(default_factory=dict)
     modules: list[Module] = field(default_factory=list)
     applications: dict[pathlib.Path, Application] = field(default_factory=dict)
-    requirements: Requirements = field(default_factory=Requirements)
+    build_requires: Requirements = field(default_factory=Requirements)
+    run_requires: Requirements = field(default_factory=Requirements)
     base_spec: Optional[Module] = None
 
     @classmethod
@@ -116,13 +117,17 @@ class Specifications:
 
         for module in spec.modules:
             self.modules.append(module)
-            if module.requires is not None:
-                add_requirements(self.requirements, module.requires)
+            if module.build_requires is not None:
+                add_requirements(self.build_requires, module.build_requires)
+            if module.run_requires is not None:
+                add_requirements(self.run_requires, module.run_requires)
 
         if spec.application is not None:
             self.applications[spec_filename] = spec.application
-            if spec.application.requires is not None:
-                add_requirements(self.requirements, spec.application.requires)
+            if spec.application.build_requires is not None:
+                add_requirements(self.build_requires, spec.application.build_requires)
+            if spec.application.run_requires is not None:
+                add_requirements(self.run_requires, spec.application.run_requires)
 
         return spec
 

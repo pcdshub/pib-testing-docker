@@ -6,6 +6,8 @@ import json
 import logging
 import os
 import pathlib
+import shlex
+import subprocess
 import sys
 import typing
 from typing import Optional, TypedDict, cast
@@ -14,9 +16,8 @@ import apischema
 import click
 import yaml
 
-from . import build, exceptions
-from .exceptions import EpicsModuleNotFoundError
-from .spec import Application, Module, Requirements, SpecificationFile
+from . import build, exceptions, syspkg
+from .spec import Application, Module, SpecificationFile
 
 if typing.TYPE_CHECKING:
     import io
@@ -193,7 +194,7 @@ def cli(
     for name in exclude_modules:
         try:
             module = specs.find_module_by_name(name)
-        except EpicsModuleNotFoundError:
+        except exceptions.EpicsModuleNotFoundError:
             logger.warning("Excluded modules: %s", exclude_modules)
         else:
             logger.debug("Excluding module: %s", module)
@@ -408,26 +409,82 @@ def cli_parse(ctx: click.Context) -> None:
 
 @cli.command(
     "requirements",
-    help="Summarize all requirements and list them",
+    help="Summarize and/or install package manager requirements",
 )
-@click.argument(
-    "source",
+@click.option(
+    "--source",
+    "sources",
     required=False,
     type=click.Choice(["yum", "apt", "conda"]),
+    multiple=True,
+    default=("apt", "conda"),
+)
+@click.option(
+    "--type",
+    "type_",
+    required=True,
+    type=click.Choice(["build", "run"]),
+    help="Select build or runtime requirements",
+)
+@click.option(
+    "--conda-path",
+    required=False,
+    type=str,
     default=None,
 )
+@click.option(
+    "--sudo/--no-sudo",
+    "sudo",
+    help="Use sudo for system package managers",
+    default=True,
+)
+@click.option(
+    "--install/--show",
+    "install",
+    help="Just show or install dependencies",
+    default=False,
+)
 @click.pass_context
-def cli_requirements(ctx: click.Context, source: Optional[str] = None) -> None:
-    logger.info("Requirements: source=%s", source)
+def cli_requirements(
+    ctx: click.Context,
+    *,
+    sources: Optional[list[str]] = None,
+    type_: str = "build",
+    sudo: bool = True,
+    conda_path: str = "conda",
+    install: bool = False,
+) -> None:
+    logger.info("Requirements: sources=%s install=%s (sudo=%s)", sources, install, sudo)
     info = cast(CliContext, ctx.obj)
     specs = info["specs"]
 
-    if source is None:
-        reqs = apischema.serialize(Requirements, specs.requirements)
-        print(json.dumps(reqs, indent=2))  # noqa: T201
+    if type_ == "build":
+        requires = specs.build_requires
+    elif type_ == "run":
+        requires = specs.run_requires
     else:
-        for req in getattr(specs.requirements, source):
-            print(req)  # noqa: T201
+        raise ValueError(f"Unsupported requirement type: {type_}")
+
+    click.echo(json.dumps(syspkg.requirements_to_dict(requires), indent=2))
+
+    if not install:
+        return
+
+    for source in sources or ["yum", "conda"]:
+        logger.info("Installing %s dependencies", source)
+        command = syspkg.get_install_command(
+            requires,
+            source,
+            sudo=sudo,
+            conda_path=conda_path,
+        )
+        if command:
+            str_command = shlex.join(command)
+            logger.info("Running: %s", str_command)
+            if subprocess.check_call(command) != 0:
+                raise exceptions.RequirementInstallationFailedError(
+                    f"Command was: {str_command}",
+                )
 
 
 @cli.command(
@@ -456,6 +513,21 @@ def cli_sync(ctx: click.Context) -> None:
 @click.pass_context
 def cli_please(ctx: click.Context) -> None:  # noqa: ARG001
     logger.info("pib, please do the thing")
+    try:
+        run_cli_programmatically(
+            "requirements",
+            "--install",
+            "--type",
+            "build",
+            "--source",
+            syspkg.guess_package_manager().name,
+            "--source",
+            "conda",
+        )
+    except ExitedWithError as ex:
+        logger.exception("Dependency installation failed")
+        sys.exit(ex.code)
+
     for command in (
         "download",
         "release_site",

@@ -63,3 +63,15 @@ class ProgramExecutionError(BuildError):
 
 class MakeError(ProgramExecutionError):
     """Make execution was unsuccessful."""
+
+
+class ProgramMissingError(Exception):
+    """Required program is missing."""
+
+    ...
+
+
+class RequirementInstallationFailedError(Exception):  # ProgramExecutionError
+    """Required program is missing."""
+
+    ...

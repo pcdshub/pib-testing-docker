@@ -11,23 +11,13 @@ WORKDIR /spec
 # - remove from here -
 COPY --chown=docker ./pib ./src
 RUN python -m pip install ./src && rm -rf ./src
+ARG SPECS=
+COPY --chown=docker ${SPECS}/modules.yaml /spec/modules.yaml
+RUN pib requirements --install --type build --source yum --source conda
 # - remove to here -
 
-ARG SPECS=
 # TODO remove; set in previous build
 COPY --chown=docker ./softIoc /ioc
-
-# RUN YUM_REQS=$(pib requirements yum) && \
-#       if [ -n "$YUM_REQS" ]; then \
-#         echo "Installing yum requirements: ${CONDA_REQS}"; \
-#         sudo yum -y install ${YUM_REQS}; \
-#       fi
-#
-# RUN CONDA_REQS=$(pib requirements conda) && \
-#       if [ -n "$CONDA_REQS" ]; then \
-#         echo "Installing conda requirements: ${CONDA_REQS}"; \
-#         micromamba install ${CONDA_REQS}; \
-#       fi
 
 WORKDIR /ioc
 RUN pib inspect --output build.yaml .

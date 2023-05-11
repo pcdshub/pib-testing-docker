@@ -67,7 +67,8 @@ class Module:
     git: Optional[GitSource] = None
     patches: list[Patch] = field(default_factory=list)
     make: Optional[MakeOptions] = field(default_factory=MakeOptions)
-    requires: Optional[Requirements] = field(default_factory=Requirements)
+    build_requires: Optional[Requirements] = field(default_factory=Requirements)
+    run_requires: Optional[Requirements] = field(default_factory=Requirements)
 
     def __post_init__(self) -> None:
         """Fix up defaults, if necessary."""
@@ -92,7 +93,8 @@ class Application:
 
     binary: str = ""
     standard_modules: list[str] = field(default_factory=list)
-    requires: Optional[Requirements] = field(default_factory=Requirements)
+    build_requires: Optional[Requirements] = field(default_factory=Requirements)
+    run_requires: Optional[Requirements] = field(default_factory=Requirements)
     make: Optional[MakeOptions] = field(default_factory=MakeOptions)
     # extra modules just go top-level?
     # extra_modules: list[Module] = field(default_factory=list)

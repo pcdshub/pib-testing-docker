@@ -15,25 +15,14 @@ COPY --chown=docker ./pib ./src
 RUN python -m pip install ./src && rm -rf ./src
 # - remove to here -
 
-WORKDIR /spec
-
 ARG SPECS=
-# TODO remove; set in previous build
-COPY --chown=docker ${SPECS}/*.yaml /spec/
+COPY --chown=docker ${SPECS}/modules.yaml /spec/modules.yaml
+
+WORKDIR /spec
 
 ENV BUILDER_SPEC_FILES="/spec/base.yaml:/spec/modules.yaml"
 
-RUN YUM_REQS=$(pib requirements yum) && \
-      if [ -n "$YUM_REQS" ]; then \
-        echo "Installing yum requirements: ${CONDA_REQS}"; \
-        sudo yum -y install ${YUM_REQS}; \
-      fi
-
-RUN CONDA_REQS=$(pib requirements conda) && \
-      if [ -n "$CONDA_REQS" ]; then \
-        echo "Installing conda requirements: ${CONDA_REQS}"; \
-        micromamba install ${CONDA_REQS}; \
-      fi
-
+# 'pib please' is short for the following, where 'yum' is auto-detected:
+# RUN pib requirements --install --type build --source yum --source conda
 # RUN pib download release_site patch sync build
 RUN pib please
