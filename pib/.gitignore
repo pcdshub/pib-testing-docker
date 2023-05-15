@@ -114,3 +114,4 @@ Thumbs.db
 
 # setuptools-scm _version.py should not be tracked:
 /pib/_version.py
+.ruff_cache/

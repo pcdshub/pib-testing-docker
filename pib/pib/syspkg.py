@@ -27,6 +27,7 @@ class PackageManager(enum.Enum):
     yum = enum.auto()
     apt = enum.auto()
     conda = enum.auto()
+    brew = enum.auto()
 
     @property
     def requires_sudo(self) -> bool:
@@ -40,11 +41,13 @@ class PackageManager(enum.Enum):
         if self == PackageManager.conda:
             if conda_path is None:
                 conda_path = find_conda_path()
-            command = [conda_path, "install"]
+            command = [conda_path, "install", "-y"]
         elif self == PackageManager.yum:
             command = ["yum", "-y", "install"]
         elif self == PackageManager.apt:
             command = ["apt-get", "install", "-y"]
+        elif self == PackageManager.brew:
+            command = ["brew", "install"]
         else:
             raise NotImplementedError
 
@@ -70,6 +73,8 @@ def guess_package_manager() -> PackageManager:
         return PackageManager.yum
     if shutil.which("apt-get"):
         return PackageManager.apt
+    if shutil.which("brew"):
+        return PackageManager.brew
     raise NotImplementedError("No supported OS package manager found")
 
 

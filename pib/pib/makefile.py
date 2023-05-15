@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import pathlib
+import re
 import shlex
 import subprocess
 import sys
@@ -140,6 +141,74 @@ def get_makefile_for_path(
     )
 
 
+def patch_makefile_contents(
+    contents: str,
+    variables: dict[str, Any],
+    *,
+    filename: Optional[pathlib.Path | str] = None,
+) -> tuple[list[str], set[str], set[str]]:
+    """
+    Patch Makefile variable declarations with those provided in ``variables``.
+
+    Parameters
+    ----------
+    contents : str
+        The contents of the Makefile.
+    variables : Dict[str, Any]
+        Variable-to-value dictionary.
+
+    Returns
+    -------
+    str
+        The new contents of the Makefile.
+    Set[str]
+        Set of variables encountered.
+    Set[str]
+        Set of updated variables.
+    """
+    updated = set()
+    seen = set()
+    # update_lines = {}
+
+    def fix_line(line: str) -> str:
+        if not line:
+            return line
+        if line[0] in " \t#":
+            return line
+
+        for separator in ("?=", ":=", "="):
+            if separator not in line:
+                continue
+
+            line = line.rstrip()
+            var, _ = line.split(separator, 1)
+            var = var.strip()
+            seen.add(var)
+            if not var or var not in variables:
+                continue
+
+            fixed = f"{var}{separator}{variables[var]}"
+            if line != fixed:
+                # update_lines[line] = fixed
+                updated.add(var)
+                return fixed
+
+        return line
+
+    lines = contents.splitlines()
+    output_lines = [fix_line(line) for line in lines]
+    if updated:
+        logger.debug(
+            "Patched makefile %s variables: %s",
+            filename,
+            updated,
+        )
+    else:
+        logger.debug("Makefile left unchanged: %s", filename)
+
+    return output_lines, seen, updated
+
+
 def patch_makefile(
     makefile: pathlib.Path,
     variables: dict[str, Any],
@@ -160,37 +229,100 @@ def patch_makefile(
     Set[str]
         Set of updated variables.
     """
-    updated = set()
-
-    def fix_line(line: str) -> str:
-        if not line:
-            return line
-        if line[0] in " \t#":
-            return line
-
-        for separator in ("?=", ":=", "="):
-            if separator in line:
-                line = line.rstrip()
-                var, _ = line.split(separator, 1)
-                var = var.strip()
-                if var and var in variables:
-                    fixed = f"{var}{separator}{variables[var]}"
-                    updated.add(var)
-                    return fixed
-
-        return line
-
     with open(makefile) as fp:
-        lines = fp.read().splitlines()
+        contents = fp.read()
 
-    output_lines = [fix_line(line) for line in lines]
+    output_lines, seen, updated = patch_makefile_contents(contents, variables, filename=makefile)
     if updated:
-        logger.info(
-            "Patched makefile %s variables: %s",
-            makefile,
-            ", ".join(updated),
+        if dry_run:
+            logger.debug("Dry run, leaving Makefile %s unchanged", makefile)
+        else:
+            with open(makefile, "w") as fp:
+                print("\n".join(output_lines), file=fp)
+    else:
+        logger.debug("Makefile left unchanged: %s", makefile)
+    return updated
+
+
+def add_dependencies_to_makefile_contents(
+    contents: str,
+    variables: dict[str, Any],
+    filename: Optional[pathlib.Path | str] = None,
+    prior_to: str = r"^EPICS_BASE\s*=",
+) -> list[str]:
+    """
+    Patch Makefile variable declarations with those provided in ``variables``.
+
+    New variables will be added as needed prior to ``EPICS_BASE``
+
+    Parameters
+    ----------
+    makefile : pathlib.Path
+        Path to the Makefile.
+    variables : Dict[str, Any]
+        Variable-to-value dictionary.
+
+    Returns
+    -------
+    Set[str]
+        Set of updated variables.
+    """
+    output_lines, seen, updated = patch_makefile_contents(
+        contents,
+        variables,
+        filename=filename,
+    )
+    remaining = {
+        variable: value for variable, value in variables.items()
+        if variable not in updated and variable not in seen
+    }
+    if not remaining:
+        return output_lines
+
+    add_before_index = None
+    for idx, line in enumerate(output_lines):
+        if re.match(prior_to, line):
+            add_before_index = idx
+            break
+    else:
+        raise ValueError(
+            f"Expression not found for adding new variables {prior_to!r} in {filename}",
         )
-        if not dry_run:
+
+    for variable, value in reversed(remaining.items()):
+        output_lines.insert(add_before_index, f"{variable}={value}")
+
+    return output_lines
+
+
+def add_dependencies_to_makefile(
+    makefile: pathlib.Path,
+    variables: dict[str, Any],
+    dry_run: bool = False,
+) -> set[str]:
+    """
+    Patch Makefile variable declarations with those provided in ``variables``.
+
+    Parameters
+    ----------
+    makefile : pathlib.Path
+        Path to the Makefile.
+    variables : Dict[str, Any]
+        Variable-to-value dictionary.
+
+    Returns
+    -------
+    Set[str]
+        Set of updated variables.
+    """
+    with open(makefile) as fp:
+        contents = fp.read()
+
+    output_lines, _, updated = patch_makefile_contents(contents, variables, filename=makefile)
+    if updated:
+        if dry_run:
+            logger.debug("Dry run, leaving Makefile %s unchanged", makefile)
+        else:
             with open(makefile, "w") as fp:
                 print("\n".join(output_lines), file=fp)
     else:
@@ -221,6 +353,10 @@ def update_related_makefiles(
     # TODO: introspection of some makefiles can error out due to $(error dep not found)
     # which means we can't check the makefiles to update, which means it's
     # entirely broken...
+    # TODO: add fallback method of trivial reading of Makefile for release variables
+    # when the above fails.  Perhaps this fallback is good enough for the general
+    # case and we shouldn't bother with whatrecord - at all? until everything's
+    # sync'd?
     for path in [
         "configure/RELEASE",
         "configure/RELEASE.local",

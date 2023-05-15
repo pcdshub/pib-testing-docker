@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import pathlib  # noqa: TCH003
+import json
+import pathlib
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal, Optional
 
@@ -41,6 +42,7 @@ class Requirements:
     yum: list[str] = field(default_factory=list)
     apt: list[str] = field(default_factory=list)
     conda: list[str] = field(default_factory=list)
+    brew: list[str] = field(default_factory=list)
 
     # TODO: split into build/runtime requirements?
 
@@ -113,8 +115,12 @@ class SpecificationFile:
 
     @classmethod
     def from_filename(cls: type[Self], filename: pathlib.Path | str) -> Self:
+        is_json = pathlib.Path(filename).suffix.lower() in {".json"}
         with open(filename) as fp:
             contents = fp.read()
 
-        serialized = yaml.load(contents, Loader=yaml.SafeLoader)
+        if is_json:
+            serialized = json.loads(contents)
+        else:
+            serialized = yaml.load(contents, Loader=yaml.SafeLoader)
         return apischema.deserialize(cls, serialized)

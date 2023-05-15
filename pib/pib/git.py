@@ -20,8 +20,6 @@ def reset_repo_directory(repo_root: pathlib.Path, directory: str) -> int:
     return run_git("checkout", "--", directory, cwd=repo_root)
 
 
-# call_git(['clone', '--quiet'] + deptharg + recursearg + ['--branch', tag, setup[dep + '_REPOURL'], dirname],
-#  cwd=ci['cachedir'])
 def clone(
     repository: str,
     to_path: pathlib.Path,
@@ -29,15 +27,15 @@ def clone(
     branch_or_tag: Optional[str] = None,
     depth: int = 1,
     recursive: bool = True,
-    # insert_template: bool = True,
+    insert_template: Optional[pathlib.Path] = None,
     args: Optional[list[str]] = None,
 ) -> int:
     """Clone a repository."""
     template_args = []
-    # if insert_template:
-    #     git_template_path = util.MODULE_PATH / "git_template"
-    #     assert git_template_path.exists()
-    #     template_args = [f"--template={git_template_path}"]
+    if insert_template is not None:
+        if not insert_template.exists():
+            raise RuntimeError(f"git_template directory not found: {insert_template}")
+        template_args = [f"--template={insert_template}"]
 
     branch_args = []
     if branch_or_tag:

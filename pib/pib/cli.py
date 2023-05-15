@@ -16,7 +16,8 @@ import apischema
 import click
 import yaml
 
-from . import build, exceptions, syspkg
+from . import build, config, exceptions, syspkg
+from .config import DEFAULT_SITE_CONFIG
 from .spec import Application, Module, SpecificationFile
 
 if typing.TYPE_CHECKING:
@@ -24,7 +25,7 @@ if typing.TYPE_CHECKING:
     from collections.abc import Generator
 
 DESCRIPTION = __doc__
-AUTO_ENVVAR_PREFIX = "BUILDER"
+AUTO_ENVVAR_PREFIX = "PIB"
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +71,82 @@ def print_version(
     ctx.exit()
 
 
+def get_spec_files_from_env() -> list[pathlib.Path]:
+    # NOTE: gather env vars and add them to the list
+    # TODO: this is not what click would do normally; is this OK?
+    spec_files = []
+    env_paths = os.environ.get(f"{AUTO_ENVVAR_PREFIX}_SPEC_FILES", "")
+    if env_paths:
+        for path_str in reversed(env_paths.split(os.pathsep)):
+            path = pathlib.Path(path_str).expanduser().resolve()
+            if path not in spec_files:
+                logger.debug("Adding spec file from environment: %s", path)
+                spec_files.insert(0, path)
+            else:
+                logger.debug("Spec file from environment already in list: %s", path)
+    return spec_files
+
+
+def configure_cli_context(
+    spec_files: list[str | pathlib.Path],
+    site_config: str | pathlib.Path,
+    exclude_modules: list[str],
+    exclude_from: list[str | pathlib.Path],
+    only_modules: list[str],
+) -> CliContext:
+    """
+    Configure the CLI context dictionary from command-line arguments.
+
+    Parameters
+    ----------
+    spec_files : list[str | pathlib.Path]
+    site_config : str | pathlib.Path
+    exclude_modules : list[str]
+    exclude_from : list[str | pathlib.Path]
+    only_modules : list[str]
+
+    Returns
+    -------
+    CliContext
+    """
+    exclude_modules = list(exclude_modules)
+    exclude_from = list(exclude_from)
+    only_modules = list(only_modules)
+
+    spec_files = [*get_spec_files_from_env(), *spec_files]
+    logger.debug("Spec file list: %s", spec_files)
+
+    specs = build.Specifications()
+    specs.settings.site = config.SiteConfig.from_filename(site_config)
+    logger.debug("Site configuration: %s", specs.settings.site)
+    for spec in spec_files:
+        logger.debug("Adding spec: %s", spec)
+        specs.add_spec_by_filename(spec)
+
+    for name in exclude_modules:
+        try:
+            module = specs.find_module_by_name(name)
+        except exceptions.EpicsModuleNotFoundError:
+            logger.warning("Excluded modules: %s", exclude_modules)
+        else:
+            logger.debug("Excluding module: %s", module)
+
+    exclude_from_specs = build.Specifications.from_spec_files(exclude_from)
+
+    if exclude_from_specs.modules:
+        logger.debug("Excluding modules from files: %s", exclude_from)
+        for module in exclude_from_specs.all_modules:
+            if module.name not in exclude_modules and module.variable not in exclude_modules:
+                logger.debug("Excluding module: %s", module)
+                exclude_modules.append(module.name)
+
+    return {
+        "specs": specs,
+        "exclude_modules": exclude_modules,
+        "only_modules": only_modules,
+    }
+
+
 @click.group(chain=True)
 @click.pass_context
 @click.option(
@@ -89,7 +166,7 @@ def print_version(
 @click.option(
     "-s",
     "--spec",
-    "spec_files",  # -> env: BUILDER_SPEC_FILES with [semi]colon delimiter
+    "spec_files",  # -> env: PIB_SPEC_FILES with [semi]colon delimiter
     help="Spec filenames to load",
     type=click.Path(
         exists=True,
@@ -101,6 +178,22 @@ def print_version(
     ),
     multiple=True,
     required=True,
+)
+@click.option(
+    "--site",
+    "site_config",  # -> env: PIB_SITE_CONFIG
+    help="Site configuration file to load",
+    type=click.Path(
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        resolve_path=True,
+        allow_dash=False,
+        path_type=pathlib.Path,
+    ),
+    default=DEFAULT_SITE_CONFIG,
+    multiple=False,
+    required=False,
 )
 @click.option(
     "--exclude",
@@ -156,6 +249,7 @@ def cli(
     *,
     log_level: str,
     spec_files: list[str | pathlib.Path],
+    site_config: str | pathlib.Path,
     exclude_modules: list[str],
     exclude_from: list[str | pathlib.Path],
     only_modules: list[str],
@@ -171,46 +265,15 @@ def cli(
     module_logger.setLevel(log_level)
     logging.basicConfig()
 
-    spec_files = list(spec_files)
-    exclude_modules = list(exclude_modules)
-
-    # NOTE: gather env vars and add them to the list
-    # TODO: this is not what click would do normally; is this OK?
-    env_paths = os.environ.get(f"{AUTO_ENVVAR_PREFIX}_SPEC_FILES", "")
-    if env_paths:
-        for path_str in reversed(
-            env_paths.split(os.pathsep),
-        ):
-            path = pathlib.Path(path_str).expanduser().resolve()
-            if path not in spec_files:
-                logger.debug("Adding spec file from environment: %s", path)
-                spec_files.insert(0, path)
-            else:
-                logger.debug("Spec file from environment already in list: %s", path)
-
-    logger.debug("Spec file list: %s", spec_files)
-    specs = build.Specifications.from_spec_files(spec_files)
-
-    for name in exclude_modules:
-        try:
-            module = specs.find_module_by_name(name)
-        except exceptions.EpicsModuleNotFoundError:
-            logger.warning("Excluded modules: %s", exclude_modules)
-        else:
-            logger.debug("Excluding module: %s", module)
-
-    exclude_from_specs = build.Specifications.from_spec_files(exclude_from)
-
-    if exclude_from_specs.modules:
-        logger.debug("Excluding modules from files: %s", exclude_from)
-        for module in exclude_from_specs.all_modules:
-            if module.name not in exclude_modules and module.variable not in exclude_modules:
-                logger.debug("Excluding module: %s", module)
-                exclude_modules.append(module.name)
-
-    ctx.obj["specs"] = specs
-    ctx.obj["exclude_modules"] = exclude_modules
-    ctx.obj["only_modules"] = only_modules
+    cli_context = configure_cli_context(
+        spec_files=spec_files,
+        site_config=site_config,
+        exclude_modules=exclude_modules,
+        exclude_from=exclude_from,
+        only_modules=only_modules,
+    )
+    ctx.obj.update(**cli_context)
+    logger.debug("Click CLI context is: %s", ctx.obj)
 
 
 @cli.command(
@@ -243,6 +306,12 @@ def cli_build(ctx: click.Context, stop_on_failure: bool = False) -> None:
     "download",
     help="Download modules listed in the spec files, optionally ",
 )
+@click.option(
+    "--patch/--no-patch",
+    "patch",
+    default=True,
+    help="Patch files after downloading",
+)
 # @click.option(
 #     "--include-deps/--exclude-deps",
 #     default=True,
@@ -251,11 +320,13 @@ def cli_build(ctx: click.Context, stop_on_failure: bool = False) -> None:
 @click.pass_context
 def cli_download(
     ctx: click.Context,
+    patch: bool = True,
     # include_deps: bool,
     # release_site: bool,
 ) -> None:
     logger.info("Download")
     info = cast(CliContext, ctx.obj)
+    logger.warning("Got site configuration: %s", info["specs"].settings.site)
 
     build.download_spec_modules(
         info["specs"],
@@ -263,6 +334,7 @@ def cli_download(
         skip=info["exclude_modules"],
         only=info["only_modules"],
         exist_ok=True,
+        patch=patch,
     )
 
 
@@ -415,7 +487,7 @@ def cli_parse(ctx: click.Context) -> None:
     "--source",
     "sources",
     required=False,
-    type=click.Choice(["yum", "apt", "conda"]),
+    type=click.Choice(["yum", "apt", "conda", "brew"]),
     multiple=True,
     default=("apt", "conda"),
 )
@@ -470,7 +542,7 @@ def cli_requirements(
     if not install:
         return
 
-    for source in sources or ["yum", "conda"]:
+    for source in sources or [syspkg.guess_package_manager(), "conda"]:
         logger.info("Installing %s dependencies", source)
         command = syspkg.get_install_command(
             requires,
@@ -481,7 +553,7 @@ def cli_requirements(
         if command:
             str_command = shlex.join(command)
             logger.info("Running: %s", str_command)
-            if subprocess.check_call(command) != 0:
+            if subprocess.check_call(command) != 0:  # noqa: S603
                 raise exceptions.RequirementInstallationFailedError(
                     f"Command was: {str_command}",
                 )
@@ -510,11 +582,32 @@ def cli_sync(ctx: click.Context) -> None:
     "please",
     help="Shortcut: download, release_site, patch, synchronize paths, and build all using defaults",
 )
+@click.option(
+    "--app",
+    type=click.Path(
+        exists=True,
+        dir_okay=True,
+        readable=True,
+        resolve_path=True,
+        allow_dash=False,
+        path_type=pathlib.Path,
+    ),
+    help="Inspect and build this application, too",
+    required=False,
+    default=None,
+)
 @click.pass_context
-def cli_please(ctx: click.Context) -> None:  # noqa: ARG001
+def cli_please(
+    ctx: click.Context,  # noqa: ARG001
+    app: Optional[pathlib.Path] = None,
+) -> None:
     logger.info("pib, please do the thing")
+    pib_args = sys.argv[1:sys.argv.index("please")]
+
+    # 1. Install any system package requirements
     try:
         run_cli_programmatically(
+            *pib_args,
             "requirements",
             "--install",
             "--type",
@@ -528,15 +621,56 @@ def cli_please(ctx: click.Context) -> None:  # noqa: ARG001
         logger.exception("Dependency installation failed")
         sys.exit(ex.code)
 
+    # 2. Download epics-base and modules
+    # 3. Create a RELEASE_SITE file
+    # 4. Synchronize all RELEASE/build system files
+    # 5. Build base and common modules
     for command in (
         "download",
         "release_site",
-        "patch",
         "sync",
         "build",
     ):
         try:
-            run_cli_programmatically(command)
+            run_cli_programmatically(*pib_args, command)
+        except ExitedWithError as ex:
+            logger.exception("Command %r failed", command)
+            sys.exit(ex.code)
+
+    if not app:
+        return
+
+    logger.info("Inspecting and building the app in %s")
+
+    # 6. Inspect the provided application, using above already-existing
+    #    module versions and recording newly-specified ones in 'pib.yaml'
+    app_conf = app / "pib.yaml"
+    if not app_conf.exists():
+        try:
+            run_cli_programmatically(
+                *pib_args,
+                "inspect",
+                str(app),
+                "-o",
+                str(app_conf),
+            )
+        except ExitedWithError as ex:
+            logger.exception("Application inspection failed")
+            sys.exit(ex.code)
+
+    # Add on the app spec file to the args
+    pib_args = ["-s", str(app_conf), *pib_args]
+
+    # 7. Download any new modules, as necessary
+    # 8. Synchronize paths with all modules
+    # 9. Buid the application
+    for command in (
+        "download",
+        "sync",
+        "build",
+    ):
+        try:
+            run_cli_programmatically(*pib_args, command)
         except ExitedWithError as ex:
             logger.exception("Command %r failed", command)
             sys.exit(ex.code)

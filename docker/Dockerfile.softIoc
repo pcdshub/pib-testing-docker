@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1.4
 # vi: syntax=Dockerfile
 
-ARG EPICS_BASE_IMAGE_TAG=
+ARG BASE_IMAGE_TAG=
 
-FROM pcdshub/pcds-epics-modules-rhel7:${EPICS_BASE_IMAGE_TAG} as build_stage
+FROM pcdshub/pcds-epics-modules-rhel7:${BASE_IMAGE_TAG} as build_stage
 
 WORKDIR /spec
 

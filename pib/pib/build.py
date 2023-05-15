@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Optional, Union
 
 from whatrecord.makefile import Dependency, DependencyGroup
 
+from .config import Settings
 from .exceptions import (
     EpicsBaseMissingError,
     EpicsBaseOnlyOnceError,
@@ -20,7 +21,6 @@ from .exceptions import (
 )
 from .makefile import call_make, get_makefile_for_path, update_related_makefiles
 from .module import (
-    BaseSettings,
     MissingDependency,
     VersionInfo,
     download_module,
@@ -51,6 +51,16 @@ logger = logging.getLogger(__name__)
 
 
 def add_requirements(reqs: Requirements, to_add: Requirements) -> None:
+    """
+    Append requirements onto a base set of requirements (``reqs``).
+
+    Parameters
+    ----------
+    reqs : Requirements
+        The base set of requirements.
+    to_add : Requirements
+        The requirements to add.
+    """
     for req in to_add.apt:
         if req not in reqs.apt:
             reqs.apt.append(req)
@@ -63,12 +73,16 @@ def add_requirements(reqs: Requirements, to_add: Requirements) -> None:
         if req not in reqs.conda:
             reqs.conda.append(req)
 
+    for req in to_add.brew:
+        if req not in reqs.brew:
+            reqs.brew.append(req)
+
 
 @dataclass
 class Specifications:
     """Specifications file."""
 
-    settings: BaseSettings = field(default_factory=BaseSettings)
+    settings: Settings = field(default_factory=Settings)
     specs: dict[pathlib.Path, SpecificationFile] = field(default_factory=dict)
     modules: list[Module] = field(default_factory=list)
     applications: dict[pathlib.Path, Application] = field(default_factory=dict)
@@ -83,7 +97,7 @@ class Specifications:
     ) -> Self:
         inst = cls()
         for path in paths:
-            inst.add_spec(path)
+            inst.add_spec_by_filename(path)
         return inst
 
     def check_settings(self) -> None:
@@ -100,19 +114,26 @@ class Specifications:
                 f"module 'epics-base'",
             )
 
-    def add_spec(self, spec_filename: Union[str, pathlib.Path]) -> SpecificationFile:
+    def add_spec_by_filename(self, spec_filename: Union[str, pathlib.Path]) -> SpecificationFile:
         spec_filename = pathlib.Path(spec_filename).expanduser().resolve()
         spec = SpecificationFile.from_filename(spec_filename)
+        self.add_spec(spec, filename=spec_filename)
+        return spec
 
+    def add_spec(
+        self,
+        spec: SpecificationFile,
+        filename: Optional[pathlib.Path] = None,
+    ) -> None:
         base = spec.modules_by_name.get("epics-base", None)
         if base is not None:
             if self.base_spec is not None:
                 raise EpicsBaseOnlyOnceError(
-                    f"epics-base may only be specified once.  Found "
-                    f"second time in: {spec_filename}",
+                    "epics-base may only be specified once in all "
+                    "specification files.",
                 )
 
-            self.settings = BaseSettings.from_base_version(base)
+            self.settings.set_base_version(base)
             self.base_spec = base
 
         for module in spec.modules:
@@ -123,13 +144,11 @@ class Specifications:
                 add_requirements(self.run_requires, module.run_requires)
 
         if spec.application is not None:
-            self.applications[spec_filename] = spec.application
+            self.applications[filename] = spec.application  # TODO
             if spec.application.build_requires is not None:
                 add_requirements(self.build_requires, spec.application.build_requires)
             if spec.application.run_requires is not None:
                 add_requirements(self.run_requires, spec.application.run_requires)
-
-        return spec
 
     @property
     def all_modules(self) -> Generator[Module, None, None]:
@@ -274,7 +293,7 @@ def should_include(module: Module, only: list[str], skip: list[str]) -> bool:
     return True
 
 
-def apply_patch_to_module(module: Module, settings: BaseSettings, patch: Patch) -> None:
+def apply_patch_to_module(module: Module, settings: Settings, patch: Patch) -> None:
     logger.info("Applying patch to module %s: %s", module.name, patch.description)
     module_path = settings.get_path_for_module(module)
     if patch.method == "replace":
@@ -291,11 +310,14 @@ def apply_patch_to_module(module: Module, settings: BaseSettings, patch: Patch) 
             file_path,
             contents,
         )
+    elif patch.method == "patch":
+        # command = ['patch', '-p1', '-i', file]
+        raise NotImplementedError("TODO")
     else:
         raise ValueError(f"Unsupported patch method: {patch.method}")
 
 
-def patch_module(module: Module, settings: BaseSettings) -> None:
+def patch_module(module: Module, settings: Settings) -> None:
     for patch in module.patches:
         apply_patch_to_module(module, settings, patch)
 
@@ -306,6 +328,7 @@ def download_spec_modules(
     skip: Optional[list[str]] = None,
     only: Optional[list[str]] = None,
     exist_ok: bool = True,
+    patch: bool = True,
 ) -> None:
     """Download modules with the versions listed in the specifications files."""
     skip = list(skip or [])
@@ -315,7 +338,12 @@ def download_spec_modules(
         if not should_include(module, only, skip):
             logger.debug("Skipping module: %s", module.name)
 
+        exists_already = specs.settings.get_path_for_module(module).exists()
         download_module(module, specs.settings, exist_ok=exist_ok)
+
+        if not exists_already and patch:
+            logger.debug("Patching newly-downloaded module: %s", module)
+            patch_module(module, specs.settings)
 
     # variable_to_dep = specs.get_variable_to_dependency()
     # print("Dependencies from specification files:")
@@ -387,7 +415,11 @@ def build(  # noqa: C901 TODO
     name_to_dep = specs.get_name_to_dependency()
 
     default_make_opts = MakeOptions()
-    order = get_build_order(list(name_to_dep.values()), skip=[])
+    order = get_build_order(
+        list(name_to_dep.values()),
+        skip=[],
+        settings=specs.settings,
+    )
     logger.info("Build order defined: %s", order)
     for dep_name in order:
         dep = name_to_dep[dep_name]
@@ -404,8 +436,8 @@ def build(  # noqa: C901 TODO
             )
             continue
 
-        logger.info("Building: %s from %s", dep_name, dep.path)
         logger.info("Specification file calls for: %s", spec)
+        logger.info("Building %r in %s", dep_name, dep.path)
         make_opts = spec.make or default_make_opts
 
         res = call_make(
@@ -594,7 +626,7 @@ class RecursiveInspector:
                 ),
             )
 
-            for missing_dep in find_missing_dependencies(dep):
+            for missing_dep in find_missing_dependencies(dep, settings=self.specs.settings):
                 yield missing_dep
 
     def download_missing_dependencies(self) -> None:
@@ -636,7 +668,7 @@ class RecursiveInspector:
                 # logger.warning("Dependency %s doesn't match version standards...", missing_dep)
                 continue
 
-            module = missing_dep.version.to_module(missing_dep.variable)
+            module = missing_dep.version.to_module(missing_dep.variable, settings=self.specs.settings)
 
             try:
                 module_path = download_module(module, self.specs.settings)
@@ -656,5 +688,5 @@ class RecursiveInspector:
                 continue
 
             # We downloaded these to the correct paths; they must match...
-            res[dep.variable_name] = VersionInfo.from_path(path)
+            res[dep.variable_name] = VersionInfo.from_path(path, settings=self.specs.settings)
         return res
