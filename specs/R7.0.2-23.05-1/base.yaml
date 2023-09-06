@@ -17,3 +17,8 @@ modules:
     make:
       args: ["-j", "4"]
       clean: true
+    build_requires:
+      yum:
+        - group:'Development Tools'
+      apt:
+        - build-essential

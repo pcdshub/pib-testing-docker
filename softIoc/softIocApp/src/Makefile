@@ -24,6 +24,8 @@ softIoc_DBD += devIocStats.dbd
 softIoc_LIBS += asyn
 softIoc_LIBS += seq
 softIoc_LIBS += devIocStats
+# Finally link to the EPICS Base libraries
+softIoc_LIBS += $(EPICS_BASE_IOC_LIBS)
 
 # softIoc_registerRecordDeviceDriver.cpp derives from softIoc.dbd
 softIoc_SRCS += softIoc_registerRecordDeviceDriver.cpp
@@ -35,11 +37,20 @@ softIoc_SRCS_vxWorks += -nil-
 # Add support from base/src/vxWorks if needed
 #softIoc_OBJS_vxWorks += $(EPICS_BASE_BIN)/vxComLibrary
 
-# Finally link to the EPICS Base libraries
-softIoc_LIBS += $(EPICS_BASE_IOC_LIBS)
-
 #===========================
+
+# used with Base < 7.0.5
+FINAL_LOCATION ?= $(shell $(PERL) $(TOOLS)/fullPathName.pl $(INSTALL_LOCATION))
 
 include $(TOP)/configure/RULES
 #----------------------------------------
 #  ADD RULES AFTER THIS LINE
+
+
+CLEANS += epicsInstallDir.h
+
+softIocMain$(DEP): epicsInstallDir.h
+
+epicsInstallDir.h: $(TOP)/configure/CONFIG_SITE*
+	$(ECHO) "FINAL_LOCATION=$(FINAL_LOCATION)"
+	$(PERL) ../makeInstallDir.pl "$(FINAL_LOCATION)" > $@

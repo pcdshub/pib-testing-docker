@@ -2,7 +2,9 @@ DOCKER_BUILDKIT=1
 DOCKER_BUILD=docker buildx build
 
 # Format: R{major}.{minor}.{micro}
-EPICS_BASE_VERSION?=R7.0.2
+# EPICS_BASE_VERSION?=R7.0.2
+# EPICS_BASE_VERSION?=R7.0.3
+EPICS_BASE_VERSION?=R7.0
 # Format: YY.MM
 BUILD_YY_MM?=23.05
 # Format: N (not zero padded)

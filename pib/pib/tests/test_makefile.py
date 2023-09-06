@@ -1,6 +1,3 @@
-import pathlib
-from pprint import pprint
-
 import pytest
 
 from pib import makefile

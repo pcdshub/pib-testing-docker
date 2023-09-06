@@ -1,9 +1,12 @@
 import logging
 import pathlib
 import shlex
+import shutil
 import subprocess
 import sys
 from typing import Optional, Union
+
+from . import exceptions
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +21,14 @@ def reset_repo_directory(repo_root: pathlib.Path, directory: str) -> int:
         The subdirectory of that dependency, relative to its root.
     """
     return run_git("checkout", "--", directory, cwd=repo_root)
+
+
+def get_git() -> str:
+    """Get the location of the ``git`` executable."""
+    git_path = shutil.which("git")
+    if git_path is None:
+        raise exceptions.ProgramMissingError("git is not installed")
+    return git_path
 
 
 def clone(
@@ -68,10 +79,10 @@ def run_git(
     """Run ``git``."""
     cwd = cwd or pathlib.Path.cwd()
     call_kwargs["cwd"] = str(cwd)
-    shell_cmd = shlex.join(["git", *args])
+    shell_cmd = shlex.join([get_git(), *args])
     logger.debug("Running '%s' in %s", shell_cmd, cwd)
     sys.stdout.flush()
-    exit_code = subprocess.call(["git", *args], **call_kwargs)
+    exit_code = subprocess.call([get_git(), *args], **call_kwargs)  # noqa: S603
     logger.debug("Ran '%s' in %s; exit code=%d", shell_cmd, cwd, exit_code)
     return exit_code
 
@@ -82,10 +93,10 @@ def run_git_check_output(
     **call_kwargs,  # noqa: ANN003
 ) -> str:
     call_kwargs["cwd"] = str(cwd or pathlib.Path.cwd())
-    shell_cmd = shlex.join(["git", *args])
+    shell_cmd = shlex.join([get_git(), *args])
     logger.debug("Running '%s' in %s", shell_cmd, cwd)
     sys.stdout.flush()
-    raw_output = subprocess.check_output(["git", *args], **call_kwargs)
+    raw_output = subprocess.check_output([get_git(), *args], **call_kwargs)  # noqa: S603
     output = raw_output.decode()
     logger.debug("Ran '%s' in %s; output=\n%s", shell_cmd, cwd, output)
     return output

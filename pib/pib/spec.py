@@ -44,8 +44,6 @@ class Requirements:
     conda: list[str] = field(default_factory=list)
     brew: list[str] = field(default_factory=list)
 
-    # TODO: split into build/runtime requirements?
-
 
 @dataclass
 class Patch:

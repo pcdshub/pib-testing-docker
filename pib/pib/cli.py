@@ -49,6 +49,17 @@ class CliContext(TypedDict):
 
 
 def get_included_modules(ctx: click.Context) -> Generator[Module, None, None]:
+    """
+    Get all modules from the specifications to be included, based on user settings.
+
+    Parameters
+    ----------
+    ctx : click.Context
+
+    Yields
+    ------
+    Module
+    """
     info = cast(CliContext, ctx.obj)
 
     for module in info["specs"].modules:
@@ -63,6 +74,7 @@ def print_version(
     param: click.Parameter,  # noqa: ARG001
     value: bool,
 ) -> None:
+    """Print the version number and exit."""
     if not value or ctx.resilient_parsing:
         return
 
@@ -72,6 +84,16 @@ def print_version(
 
 
 def get_spec_files_from_env() -> list[pathlib.Path]:
+    """
+    Get specification file paths from the environment.
+
+    PIB_SPEC_FILES is an environment variable that can be used in addition
+    to command-line parameters to tell pib which specification files to load.
+
+    Returns
+    -------
+    list[pathlib.Path]
+    """
     # NOTE: gather env vars and add them to the list
     # TODO: this is not what click would do normally; is this OK?
     spec_files = []
@@ -112,15 +134,21 @@ def configure_cli_context(
     exclude_modules = list(exclude_modules)
     exclude_from = list(exclude_from)
     only_modules = list(only_modules)
+    spec_files = list(spec_files)
 
-    spec_files = [*get_spec_files_from_env(), *spec_files]
-    logger.debug("Spec file list: %s", spec_files)
+    # click doesn't seem to like how we use environment variables. Do a bit
+    # of munging of env vars and CLI arguments here to get the final list
+    # of spec files.
+    for env_spec in reversed(get_spec_files_from_env()):
+        if env_spec not in spec_files:
+            logger.debug("Addingspec file from env: %s", env_spec)
+            spec_files.insert(0, env_spec)
+    logger.debug("Final spec file list: %s", spec_files)
 
     specs = build.Specifications()
     specs.settings.site = config.SiteConfig.from_filename(site_config)
     logger.debug("Site configuration: %s", specs.settings.site)
     for spec in spec_files:
-        logger.debug("Adding spec: %s", spec)
         specs.add_spec_by_filename(spec)
 
     for name in exclude_modules:
@@ -442,7 +470,7 @@ def cli_inspect(
         if variable in specs.variable_name_to_module:
             app.standard_modules.append(variable)
         else:
-            extra_modules.append(version.to_module(variable))
+            extra_modules.append(version.to_module(variable, settings=specs.settings))
 
     file = SpecificationFile(
         application=app,
@@ -544,15 +572,14 @@ def cli_requirements(
 
     for source in sources or [syspkg.guess_package_manager(), "conda"]:
         logger.info("Installing %s dependencies", source)
-        command = syspkg.get_install_command(
+        for command in syspkg.get_install_commands(
             requires,
             source,
             sudo=sudo,
             conda_path=conda_path,
-        )
-        if command:
+        ):
             str_command = shlex.join(command)
-            logger.info("Running: %s", str_command)
+            logger.info("%s install running: %s", source, str_command)
             if subprocess.check_call(command) != 0:  # noqa: S603
                 raise exceptions.RequirementInstallationFailedError(
                     f"Command was: {str_command}",
@@ -677,6 +704,19 @@ def cli_please(
 
 
 def run_cli_programmatically(*args: str) -> None:
+    """
+    Run the pib CLI with the provided arguments.
+
+    This helper allows for the environment variable prefix to be set and
+    also helps catch SystemExit such that a sequence of CLI executions can be
+    performed without being interrupted.  If one step fails, ``ExitedWithError``
+    will be raised.
+
+    Parameters
+    ----------
+    *args : str
+        Command-line parameters to pass to the main ``pib`` CLI entrypoint.
+    """
     try:
         cli(list(args), auto_envvar_prefix=AUTO_ENVVAR_PREFIX)
     except SystemExit as ex:
@@ -686,6 +726,7 @@ def run_cli_programmatically(*args: str) -> None:
 
 
 def main() -> None:
+    """Primary entrypoint for pib."""
     try:
         return run_cli_programmatically(*sys.argv[1:])
     except ExitedWithError as ex:

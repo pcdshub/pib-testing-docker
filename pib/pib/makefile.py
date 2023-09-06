@@ -78,7 +78,7 @@ def call_make(
     start_dt = util.dt_now()
 
     child = subprocess.Popen(
-        command,
+        command,  # noqa: S603
         cwd=path,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,

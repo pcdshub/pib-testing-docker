@@ -1,36 +1,40 @@
 from __future__ import annotations
 
 import logging
-import pathlib
 import re
 import shlex
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, ClassVar, Optional
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Optional
 
 from whatrecord.makefile import Dependency, DependencyGroup, Makefile
 
 from . import config, git, util
-from .config import Settings
 from .exceptions import DownloadFailureError, TargetDirectoryAlreadyExistsError
 from .makefile import get_makefile_for_path
 from .spec import GitSource, Module
 
 if TYPE_CHECKING:
+    import pathlib
     from collections.abc import Generator
     try:
         from typing import Self
     except ImportError:
         from typing_extensions import Self
+    from .config import Settings
+
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class VersionInfo:
-    """Version information."""
+    """Module name and version information."""
 
+    #: The name (i.e., repository name) of the module.
     name: str
+    #: The version of EPICS base it is associated with.
     base: str
+    #: The version tag name.
     tag: str
 
     # @property
@@ -40,6 +44,20 @@ class VersionInfo:
     #     return EPICS_SITE_TOP / self.tag / "modules"
 
     def to_module(self, variable_name: str, settings: Settings) -> Module:
+        """
+        Create a specification file ``Module`` out of this version.
+
+        Parameters
+        ----------
+        variable_name : str
+            The variable name to use.
+        settings : Settings
+            pib path convention settings.
+
+        Returns
+        -------
+        Module
+        """
         return Module(
             name=self.name,
             variable=variable_name,
@@ -56,6 +74,25 @@ class VersionInfo:
         path: pathlib.Path,
         settings: Settings,
     ) -> Optional[Self]:
+        """
+        Create a VersionInfo instance from a given path.
+
+        This uses the path conventions defined in the site settings to
+        determine the base version, module version, and module name.
+
+        Parameters
+        ----------
+        path : pathlib.Path
+            The path to the module (or epics-base).
+        settings : Settings
+            pib settings that specify path conventions.
+
+        Returns
+        -------
+        VersionInfo or None
+            If the path does not match any configured conventions, ``None``
+            will be returned.
+        """
         path_str = str(settings.site.normalize_path(path))
         for regex in settings.site.module_path_regexes:
             match = re.match(regex, path_str)
@@ -99,18 +136,26 @@ class MissingDependency:
 
 def get_build_order(
     dependencies: list[Dependency],
-    settings: settings.Settings,
+    settings: Settings,
     build_first: Optional[list[str]] = None,
     skip: Optional[list[str]] = None,
 ) -> list[str]:
     """
-    Get the build order by variable name.
+    Get the build order by name.
+
+    Parameters
+    ----------
+    dependencies : list[Dependency]
+    settings : Settings
+    build_first : list[str], optional
+        Build these prior to other modules.
+    skip : Optional[list[str]]
+        Skip building these entirely.
 
     Returns
     -------
     list of str
-        List of Makefile-defined variable names, in order of how they
-        should be built.
+        List of dependency names, in order of how they should be built.
     """
     # TODO: order based on dependency graph could/should be done efficiently
     skip = list(skip or [])
@@ -170,6 +215,20 @@ def get_build_order(
 
 
 def get_makefile_for_module(module: Module, settings: config.Settings) -> Makefile:
+    """
+    Get a whatrecord Makefile instance for the provided module spec.
+
+    Parameters
+    ----------
+    module : Module
+        The module specification.
+    settings : config.Settings
+        Path and related settings.
+
+    Returns
+    -------
+    Makefile
+    """
     path = settings.get_path_for_module(module)
     return get_makefile_for_path(path, epics_base=settings.epics_base)
 
@@ -183,6 +242,29 @@ def get_dependency_group_for_module(
     variable_name: Optional[str] = None,
     keep_os_env: bool = False,
 ) -> DependencyGroup:
+    """
+    Get a whatrecord DependencyGroup for the specified module.
+
+    Parameters
+    ----------
+    module : Module
+        The module to check.
+    settings : config.Settings
+        Configuration settings regarding paths and such
+    recurse : bool
+        Recurse into dependencies, defaults to True.
+    name : str, optional
+        The name of the provided module, if not already set.
+    variable_name : Optional[str]
+        The variable name of the module, if not already set.
+    keep_os_env : bool
+        Keep OS environment variables after the introspection phase in
+        the DependencyGroup metadata.
+
+    Returns
+    -------
+    DependencyGroup
+    """
     makefile = get_makefile_for_module(module, settings)
     res = DependencyGroup.from_makefile(
         makefile,

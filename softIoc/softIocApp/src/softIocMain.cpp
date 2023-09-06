@@ -28,66 +28,23 @@
 #include "osiFileName.h"
 #include "registryFunction.h"
 #include "subRecord.h"
+#include <epicsVersion.h>
 #include <epicsGetopt.h>
+#include "epicsInstallDir.h"
 
 extern "C" int softIoc_registerRecordDeviceDriver(struct dbBase *pdbbase);
 
-#define DBD_BASE "dbd" OSI_PATH_SEPARATOR "softIoc.dbd"
-#define DBD_FILE_REL ".." OSI_PATH_SEPARATOR ".." OSI_PATH_SEPARATOR DBD_BASE
-#define DBD_FILE                                                               \
-  ".." OSI_PATH_SEPARATOR ".." OSI_PATH_SEPARATOR "dbd" OSI_PATH_SEPARATOR     \
-  "softIoc.dbd"
-
-namespace {
-
-#ifndef PATH_MAX
-#define PATH_MAX 100
+#ifndef EPICS_BASE
+// so IDEs knows EPICS_BASE is a string constant
+#  define EPICS_BASE "/"
+#  error -DEPICS_BASE required
 #endif
 
-// POSIX-only, ignoring osi stuff for now
-char *epicsGetExecName(void) {
-  ssize_t max = PATH_MAX;
-  char *ret = NULL;
-  ssize_t n;
+#define DBD_BASE "dbd" OSI_PATH_SEPARATOR "softIoc.dbd"
+#define DBD_FILE_REL ".." OSI_PATH_SEPARATOR ".." OSI_PATH_SEPARATOR DBD_BASE
+#define DBD_FILE EPICS_BASE OSI_PATH_SEPARATOR DBD_BASE
 
-  while (1) {
-    char *temp = (char *)realloc(ret, max);
-    if (!temp) {
-      /* we treat alloc failure as terminal */
-      free(ret);
-      ret = NULL;
-      break;
-    }
-    ret = temp;
-
-    n = readlink("/proc/self/exe", ret, max);
-    if (n == -1) {
-      free(ret);
-      ret = NULL;
-      break;
-    } else if (n < max) {
-      /* readlink() never adds a nil */
-      ret[n] = '\0';
-      break;
-    }
-
-    max += 64;
-  }
-
-  return ret;
-}
-
-char *epicsGetExecDir(void) {
-  char *ret = epicsGetExecName();
-  if (ret) {
-    char *sep = strrchr(ret, '/');
-    if (sep) {
-      /* nil the character after the / */
-      sep[1] = '\0';
-    }
-  }
-  return ret;
-}
+namespace {
 
 bool verbose = false;
 
@@ -186,23 +143,24 @@ int main(int argc, char *argv[]) {
     bool loadedDb = false;
     bool ranScript = false;
 
-    // attempt to compute relative paths
-    {
-      std::string prefix;
-      char *cprefix = epicsGetExecDir();
-      if (cprefix) {
-        try {
-          prefix = cprefix;
-          free(cprefix);
-        } catch (...) {
-          free(cprefix);
-          throw;
-        }
-      }
+#if EPICS_VERSION_INT >= VERSION_INT(7, 0, 3, 1)
+        // attempt to compute relative paths
+        {
+            std::string prefix;
+            char *cprefix = epicsGetExecDir();
+            if(cprefix) {
+                try {
+                    prefix = cprefix;
+                    free(cprefix);
+                } catch(...) {
+                    free(cprefix);
+                    throw;
+                }
+            }
 
-      dbd_file = prefix + DBD_FILE_REL;
-      // exit_file = prefix + EXIT_FILE_REL;
-    }
+            dbd_file = prefix + DBD_FILE_REL;
+        }
+#endif
 
     int opt;
 

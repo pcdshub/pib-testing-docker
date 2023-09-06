@@ -20,8 +20,8 @@ RUN pib requirements --install --type build --source yum --source conda
 COPY --chown=docker ./softIoc /ioc
 
 WORKDIR /ioc
-RUN pib inspect --output build.yaml .
-RUN pib -s build.yaml sync build
+RUN pib inspect --output pib.yaml .
+RUN pib --log DEBUG -s pib.yaml sync build
 
 RUN echo "pib --log=DEBUG download release_site patch sync build" >> ~/.bash_history
 RUN echo "pib --log=DEBUG inspect --output build.yaml ." >> ~/.bash_history

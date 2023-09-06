@@ -25,4 +25,4 @@ ENV PIB_SPEC_FILES="/spec/base.yaml:/spec/modules.yaml"
 # 'pib please' is short for the following, where 'yum' is auto-detected:
 # RUN pib requirements --install --type build --source yum --source conda
 # RUN pib download release_site patch sync build
-RUN pib please
+RUN pib --log DEBUG please

@@ -95,12 +95,25 @@ class Specifications:
         cls: type[Self],
         paths: list[Union[pathlib.Path, str]],
     ) -> Self:
+        """
+        Create combined Specifications from the provided paths.
+
+        Parameters
+        ----------
+        paths : list[Union[pathlib.Path, str]]
+            Paths to the specification file(s).
+
+        Returns
+        -------
+        Specifications
+        """
         inst = cls()
         for path in paths:
             inst.add_spec_by_filename(path)
         return inst
 
     def check_settings(self) -> None:
+        """Check settings for basic logic issues."""
         if self.base_spec is None:
             raise InvalidSpecificationError(
                 "EPICS_BASE not found in specification file list; "
@@ -115,9 +128,29 @@ class Specifications:
             )
 
     def add_spec_by_filename(self, spec_filename: Union[str, pathlib.Path]) -> SpecificationFile:
+        """
+        Add a specification by its filename.
+
+        The specification settings get appended to this one, and the loaded
+        file is returned as-is.
+
+        Parameters
+        ----------
+        spec_filename : str or pathlib.Path
+            The filename on disk.
+
+        Returns
+        -------
+        SpecificationFile
+        """
+        logger.debug("Loading spec file: %s", spec_filename)
         spec_filename = pathlib.Path(spec_filename).expanduser().resolve()
         spec = SpecificationFile.from_filename(spec_filename)
-        self.add_spec(spec, filename=spec_filename)
+        try:
+            self.add_spec(spec, filename=spec_filename)
+        except Exception:
+            logger.exception("Failed to add spec file: %s", spec_filename)
+            raise
         return spec
 
     def add_spec(
@@ -125,6 +158,14 @@ class Specifications:
         spec: SpecificationFile,
         filename: Optional[pathlib.Path] = None,
     ) -> None:
+        """
+        Append an already-loaded SpecificationFile to this one.
+
+        Parameters
+        ----------
+        spec : SpecificationFile
+            The spec to append.
+        """
         base = spec.modules_by_name.get("epics-base", None)
         if base is not None:
             if self.base_spec is not None:
@@ -152,6 +193,7 @@ class Specifications:
 
     @property
     def all_modules(self) -> Generator[Module, None, None]:
+        """A generator of all contained modules."""
         # TODO application-level overrides? shouldn't be possible, right?
         # so raise/warn/remove extra modules that are redefined
         yield from self.modules
@@ -160,6 +202,13 @@ class Specifications:
 
     @property
     def variable_name_to_path(self) -> dict[str, pathlib.Path]:
+        """
+        Module variable name to installed path.
+
+        Returns
+        -------
+        dict[str, pathlib.Path]
+        """
         return {
             module.variable: self.settings.get_path_for_module(module)
             for module in self.modules
@@ -167,19 +216,35 @@ class Specifications:
 
     @property
     def name_to_module(self) -> dict[str, Module]:
+        """
+        Module name to Module instance.
+
+        Returns
+        -------
+        dict[str, Module]
+        """
         return {module.name: module for module in self.all_modules}
 
     @property
     def variable_name_to_module(self) -> dict[str, Module]:
+        """
+        Variable name to Module instance.
+
+        Returns
+        -------
+        dict[str, Module]
+        """
         return {module.variable: module for module in self.all_modules}
 
     @property
-    def variables_to_rename(self) -> dict[str, str]:
-        # TODO
-        return {}
-
-    @property
     def variables_to_sync(self) -> dict[str, str]:
+        """
+        Variables to synchronize during the ``pib sync`` step.
+
+        Returns
+        -------
+        dict[str, str]
+        """
         variables = dict(self.settings.variables)
         for var, path in self.variable_name_to_path.items():
             variables[var] = str(path)
@@ -187,6 +252,16 @@ class Specifications:
         return variables
 
     def get_name_to_dependency(self) -> dict[str, Dependency]:
+        """
+        Get name to Dependency information.
+
+        This is a heavy operation - so cache the result.  It uses whatrecord's
+        Makefile introspection mechanism to find dependencies.
+
+        Returns
+        -------
+        dict[str, Dependency]
+        """
         name_to_dep: dict[str, Dependency] = {}
         for module in self.all_modules:
             # module_path = self.settings.get_path_for_module(module)
@@ -260,7 +335,12 @@ def create_release_site(
     ----------
     specs : Specifications
     extra_variables: dict[str, str], optional
+        Extra variables to set in the RELEASE_SITE file.
     path: pathlib.Path, optional
+        The path to write the RELEASE_SITE file to.  Defaults to
+        settings-specified "{settings.support}/RELEASE_SITE".  For example,
+        this setting for EPICS BASE R7.0.3.1-2.0 would be:
+        ``/cds/group/pcds/epics/R7.0.3.1-2.0/modules``.
 
     Returns
     -------
@@ -276,6 +356,8 @@ def create_release_site(
     if extra_variables:
         variables.update(extra_variables)
 
+    release_site.parent.mkdir(parents=True, exist_ok=True)
+
     with open(release_site, mode="w") as fp:
         for variable, value in variables.items():
             print(f"{variable}={value}", file=fp)
@@ -284,6 +366,23 @@ def create_release_site(
 
 
 def should_include(module: Module, only: list[str], skip: list[str]) -> bool:
+    """
+    Filter to determine if ``module`` should be included in operations based on user settings.
+
+    Parameters
+    ----------
+    module : Module
+        The module to check.
+    only : list[str]
+        User-specified modules to *only* include.
+    skip : list[str]
+        User-specified modules to skip.
+
+    Returns
+    -------
+    bool
+        ``True`` if the module should be included.
+    """
     if only and module.variable not in only and module.name not in only:
         return False
 
@@ -294,6 +393,18 @@ def should_include(module: Module, only: list[str], skip: list[str]) -> bool:
 
 
 def apply_patch_to_module(module: Module, settings: Settings, patch: Patch) -> None:
+    """
+    Patch the provided module, if applicable.
+
+    Parameters
+    ----------
+    module : Module
+        The module to patch.
+    settings : Settings
+        pib-specific settings.
+    patch : Patch
+        The patch settings.
+    """
     logger.info("Applying patch to module %s: %s", module.name, patch.description)
     module_path = settings.get_path_for_module(module)
     if patch.method == "replace":
@@ -318,6 +429,16 @@ def apply_patch_to_module(module: Module, settings: Settings, patch: Patch) -> N
 
 
 def patch_module(module: Module, settings: Settings) -> None:
+    """
+    Patch the provided module, if applicable.
+
+    Parameters
+    ----------
+    module : Module
+        The module to patch.
+    settings : Settings
+        pib-specific settings.
+    """
     for patch in module.patches:
         apply_patch_to_module(module, settings, patch)
 
@@ -330,7 +451,23 @@ def download_spec_modules(
     exist_ok: bool = True,
     patch: bool = True,
 ) -> None:
-    """Download modules with the versions listed in the specifications files."""
+    """
+    Download modules with the versions listed in the specifications files.
+
+    Parameters
+    ----------
+    specs : Specifications
+        The specifications to use.
+    skip : list[str], optional
+        Skip building these modules (by variable name or module name)
+    only : list[str], optional
+        Only build these modules (by variable name or module name)
+    exist_ok : bool, optional
+        If ``exist_ok`` is set, do not require an empty destination path
+        before continuing.  Defaults to True.
+    patch : bool, optional
+        Patch after downloading, if applicable. Defaults to True.
+    """
     skip = list(skip or [])
     only = list(only or [])
 
@@ -352,6 +489,18 @@ def download_spec_modules(
 
 
 def sync_module(specs: Specifications, module: Module) -> None:
+    """
+    Synchronize RELEASE paths on disk for the provided module.
+
+    Parameters
+    ----------
+    specs : Specifications
+        The specifications to use.
+    module : Module
+        The module to synchronize.
+    """
+    logger.debug("Synchronizing module: %s", module.name)
+
     group = get_dependency_group_for_module(module, specs.settings, recurse=True)
     dep = group.all_modules[group.root]
     logger.info("Updating makefiles in %s", group.root)
@@ -363,6 +512,18 @@ def sync_module(specs: Specifications, module: Module) -> None:
 def sync_path(
     specs: Specifications, path: pathlib.Path, extras: Optional[dict[str, str]] = None,
 ) -> None:
+    """
+    Synchronize RELEASE paths on disk for the provided directory.
+
+    Parameters
+    ----------
+    specs : Specifications
+        The specifications to use.
+    path : pathlib.Path
+        The single path to synchronize.
+    extras : dict[str, str], optional
+        Additional variables to set.
+    """
     makefile = get_makefile_for_path(path, epics_base=specs.settings.epics_base)
     # TODO introspection at 2 levels? 'modules' may be the wrong abstraction?
     # or is (base / modules between / app) not too many layers?
@@ -380,6 +541,16 @@ def sync_path(
 
 
 def sync(specs: Specifications, skip: Optional[list[str]] = None) -> None:
+    """
+    Synchronize RELEASE paths on disk for the provided specifications.
+
+    Parameters
+    ----------
+    specs : Specifications
+        The specifications to use.
+    skip : list[str], optional
+        Skip synchronizing these modules (by variable name or module name)
+    """
     skip = list(skip or [])
 
     logger.debug(
@@ -406,6 +577,24 @@ def build(  # noqa: C901 TODO
     rebuild: bool = False,
     clean: bool = True,
 ) -> None:
+    """
+    Build base, modules, and/or IOC defined in the specifications.
+
+    Parameters
+    ----------
+    specs : Specifications
+        The specifications to use.
+    stop_on_failure : bool
+        Stop the build process if one part fails.  Defaults to True.
+    only : list[str], optional
+        Only build these modules (by variable name or module name)
+    skip : list[str], optional
+        Skip building these modules (by variable name or module name)
+    rebuild : bool
+        Rebuild modules, regardless of if they look built.
+    clean : bool
+        Run ``make clean`` after a successful build.
+    """
     skip = list(skip or [])
     only = list(only or [])
     specs.check_settings()
@@ -513,6 +702,21 @@ class RecursiveInspector:
         path: pathlib.Path,
         specs: Specifications,
     ) -> Self:
+        """
+        Start an inspector at the provided path.
+
+        Parameters
+        ----------
+        path : pathlib.Path
+            Starting top-level path, either to its Makefile or directory that
+            contains a Makefile.
+        specs : Specifications
+            Configured specifications.
+
+        Returns
+        -------
+        RecursiveInspector
+        """
         path = path.expanduser().resolve()
         if path.parts[-1] == "Makefile":
             path = path.parent
@@ -532,10 +736,12 @@ class RecursiveInspector:
 
     @property
     def target_dependency(self) -> Dependency:
+        """Target dependency to be built."""
         return self.group.all_modules[self.group.root]
 
     @property
     def makefile_path(self) -> pathlib.Path:
+        """Starting Makefile path."""
         return self.inspect_path / "Makefile"
 
     def add_dependency(
@@ -608,6 +814,13 @@ class RecursiveInspector:
                 yield dep
 
     def find_dependencies_to_download(self) -> Generator[MissingDependency, None, None]:
+        """
+        Find missing dependencies to download.
+
+        Returns
+        -------
+        Generator[MissingDependency, None, None]
+        """
         for dep in self.find_all_dependencies():
             logger.debug(
                 (
@@ -682,6 +895,13 @@ class RecursiveInspector:
 
     @property
     def variable_to_version(self) -> dict[str, VersionInfo]:
+        """
+        Get a mapping of dependency variable name to VersionInfo.
+
+        Returns
+        -------
+        dict[str, VersionInfo]
+        """
         res = {}
         for path, dep in self.group.all_modules.items():
             if not dep.variable_name:
