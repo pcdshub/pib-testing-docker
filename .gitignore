@@ -1,5 +1,5 @@
 softIoc/bin
-O.*
+O.*/
 dbd/
 db/
 /pib/build
